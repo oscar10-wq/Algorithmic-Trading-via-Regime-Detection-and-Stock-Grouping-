@@ -1,0 +1,271 @@
+\documentclass[11pt, a4paper]{article}
+
+% ── Fonts & encoding ─────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% ── Page geometry ────────────────────────────────────────────
+\usepackage[
+  top=2.5cm,
+  bottom=2.5cm,
+  left=2.5cm,
+  right=2.5cm
+]{geometry}
+
+% ── Maths ────────────────────────────────────────────────────
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% ── Tables & figures ─────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{caption}
+\captionsetup{
+  font=small,
+  labelfont=bf,
+  skip=6pt
+}
+
+% ── Section formatting ───────────────────────────────────────
+\usepackage{titlesec}
+\titleformat{\section}
+  {\large\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}
+  {\normalsize\bfseries}{\thesubsection.}{0.5em}{}
+\titlespacing*{\section}{0pt}{1.5ex plus .5ex minus .2ex}{1ex plus .2ex}
+\titlespacing*{\subsection}{0pt}{1.2ex plus .4ex minus .2ex}{0.8ex plus .2ex}
+
+% ── Headers & footers ───────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textit{ML: k-Means and PCA for Regime Detection}}
+\fancyhead[R]{\small\textit{Jing et al.}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ── Hyperlinks ───────────────────────────────────────────────
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!70!black,
+  citecolor=blue!70!black,
+  urlcolor=blue!70!black
+}
+
+% ── Spacing ──────────────────────────────────────────────────
+\usepackage{setspace}
+\setstretch{1.15}
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+
+% ═════════════════════════════════════════════════════════════
+\title{\textbf{Machine Learning: k-Means and PCA\\[4pt] for Regime Detection}}
+\author{Zhidian Jing, Siqi Zhang, Stefaan Fernando, Daniel Greenstein, Oscar Peyron\\[2pt]
+\small University College London \quad -- \quad COMP0040}
+\date{April 2026}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+% ─────────────────────────────────────────────────────────────
+\section{Introduction}
+
+% ─────────────────────────────────────────────────────────────
+\section{Data Processing and Feature Engineering}
+This project focuses on regime detection on multi-dimensional financial time-series.
+We track 9 major stock indices across 3 different regions (America, Europe, Asia) to develop our analysis.
+
+\begin{table}[H]
+\centering
+\caption{Index universe by region.}
+\label{tab:index_universe}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{l l l}
+\toprule
+\textbf{Region} & \textbf{Index} & \textbf{Ticker} \\
+\midrule
+America & S\&P 500    & \texttt{\^{}GSPC}  \\
+America & Dow Jones   & \texttt{\^{}DJI}   \\
+America & Nasdaq      & \texttt{\^{}IXIC}  \\
+\addlinespace
+Europe  & FTSE 100    & \texttt{\^{}FTSE}  \\
+Europe  & CAC 40      & \texttt{\^{}FCHI}  \\
+Europe  & DAX         & \texttt{\^{}GDAXI} \\
+\addlinespace
+Asia    & KOSPI       & \texttt{\^{}KS11}  \\
+Asia    & Nikkei 225  & \texttt{\^{}N225}  \\
+Asia    & Hang Seng   & \texttt{\^{}HSI}   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Raw Data Structure}
+Each index is downloaded from Yahoo Finance with daily OHLCV columns:
+\texttt{Date}, \texttt{Open}, \texttt{High}, \texttt{Low}, \texttt{Close}, and \texttt{Volume}.
+After merging, the full DataFrame uses a MultiIndex on columns of the form
+\texttt{(index\_name, OHLCV\_field)}, so that, for example, S\&P\,500 closing
+prices are accessed via \texttt{df["SP500"]["Close"]}.
+
+\subsection{Feature Engineering}
+From the closing prices two families of features are computed.
+
+\paragraph{Log-returns.}
+Over multiple horizons (default: 1, 5, and 21 trading days):
+\begin{equation}
+\label{eq:log_return}
+r_{t,p} = \ln\!\left(\frac{P_{t}}{P_{t-p}}\right).
+\end{equation}
+
+\paragraph{Rolling annualised volatility.}
+Default windows of 21 and 63 days:
+\begin{equation}
+\label{eq:vol}
+\sigma_{t,w} = \operatorname{std}\!\left(r_{t-w:t}\right) \times \sqrt{252}\,.
+\end{equation}
+
+This produces a feature matrix of shape
+$\bigl(T,\; 9 \times (3 \text{ returns} + 2 \text{ volatilities})\bigr) = (T, 45)$
+columns, where each row corresponds to one trading day and each column to a
+pair \texttt{(index\_name, feature\_name)}.
+
+In order to capture the dynamic nature of regime, features are computed in a rolling window fashion, so that the feature vector at time $t$ is based on data from the previous $w$ days.
+For example, the rolling correlation between two indices $X$ and $Y$ at time $t$ with window $w$ is computed as:
+\begin{equation}
+\label{eq:rolling_corr}
+    \rho_{X,Y,t} = \frac{\sum_{i=0}^{w-1} (r_{X,t-i} - \bar{r}_X)(r_{Y,t-i} - \bar{r}_Y)}{\sqrt{\sum_{i=0}^{w-1} (r_{X,t-i} - \bar{r}_X)^2 \;\sum_{i=0}^{w-1} (r_{Y,t-i} - \bar{r}_Y)^2}}
+\end{equation}
+where $\bar{r}_X$ and $\bar{r}_Y$ are the mean returns of indices $X$ and $Y$ over the window $w$.
+
+We additionally compute momentum Z-score features to measure mean-reversion by normalising the distance between the current price and the moving average by the rolling volatility:
+\begin{equation}
+\label{eq:zscore}
+    Z_{t,w} = \frac{P_t - \operatorname{MA}_{t,w}}{\sigma_{t,w}}
+\end{equation}
+
+\subsection{Pipeline Summary}
+
+\begin{figure}[H]
+\centering
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{c}
+\toprule
+\textbf{Yahoo Finance API} \\
+$\big\downarrow$ \\
+Raw OHLCV (per index) \\
+$\big\downarrow$ \\
+Merged DataFrame (MultiIndex columns) \\
+$\big\downarrow$ \\
+Close prices only (simple DataFrame) \\
+$\big\downarrow$ \\
+\begin{tabular}{c@{\hspace{2em}}c}
+Log-returns (1d, 5d, 21d) & Rolling volatility (21d, 63d) \\
+\end{tabular} \\
+$\big\downarrow$ \\
+\textbf{Feature matrix $\rightarrow$ Clustering / PCA} \\
+\bottomrule
+\end{tabular}
+\caption{Data pipeline from raw download to feature matrix.}
+\label{fig:pipeline}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────
+\section{Mathematical Foundations}
+In this project we apply two main machine learning techniques for regime detection: k-means clustering and Principal Component Analysis (PCA).
+
+\subsection{K-Means Clustering}
+K-means clustering is an unsupervised learning algorithm that partitions the data into $K$ clusters by minimising the within-cluster sum of squares. The algorithm iteratively assigns each data point to the nearest cluster centroid and then updates the centroids based on the assigned points.
+
+The Within-Cluster Sum of Squares (WCSS) is defined as:
+\begin{equation}
+\label{eq:wcss}
+\text{WCSS} = \sum_{k=1}^{K} \sum_{x_i \in C_k} \| x_i - \mu_k \|^2
+\end{equation}
+where $C_k$ is the set of points in cluster $k$ and $\mu_k$ is the centroid of cluster $k$.
+
+However, when dealing with higher-dimensional data, the standard k-means algorithm can be limited due to the curse of dimensionality as well as the different topologies of the clusters.
+To address this, one can reduce dimensionality using PCA before applying k-means.
+
+\subsection{Principal Component Analysis (PCA)}
+
+% ─────────────────────────────────────────────────────────────
+\section{Proposed Algorithm}
+We propose the following algorithm for regime detection: 
+\begin{algorithm}[H]
+\caption{K-Means Regime Detection Pipeline}
+\label{alg:regime_detection}
+\begin{algorithmic}[1]
+
+\Require Closing price matrix $\mathbf{P} \in \mathbb{R}^{T \times N}$ for $N$ indices over $T$ trading days
+\Require PCA variance threshold $\alpha \in (0,1]$, candidate range $[K_{\min}, K_{\max}]$
+
+\Ensure Regime labels $\ell_t \in \{0, \dots, K^{*}\!-\!1\}$ for each day $t$, ordered by mean return
+
+\Statex
+\Statex \textbf{— Stage 1: Feature Engineering —}
+\For{each index $n = 1, \dots, N$}
+    \For{each horizon $p \in \{1, 5, 21\}$}
+        \State $r_{t,p}^{(n)} \gets \ln\!\bigl(P_t^{(n)} / P_{t-p}^{(n)}\bigr)$ \Comment{Log-returns}
+    \EndFor
+    \For{each window $w \in \{21, 63\}$}
+        \State $\sigma_{t,w}^{(n)} \gets \operatorname{std}\!\bigl(r_{t\text{-}w:t}^{(n)}\bigr) \times \sqrt{252}$ \Comment{Rolling volatility}
+    \EndFor
+    \State $Z_t^{(n)} \gets \bigl(P_t^{(n)} - \operatorname{MA}_{t,63}^{(n)}\bigr) \big/ \sigma_{t,63}^{(n)}$ \Comment{Momentum z-score}
+    \State $\text{RSI}_t^{(n)} \gets \text{RSI}_{14}\!\bigl(P^{(n)}\bigr)$ \Comment{Relative Strength Index}
+\EndFor
+\For{each pair $(i, j)$ with $i < j$}
+    \State $\rho_{t}^{(i,j)} \gets \operatorname{RollingCorr}_{63}\!\bigl(r^{(i)}, r^{(j)}\bigr)$ \Comment{Pairwise correlation}
+\EndFor
+\State Concatenate all features into $\mathbf{F} \in \mathbb{R}^{T' \times D}$ and drop warm-up rows
+
+\Statex
+\Statex \textbf{— Stage 2: Standardisation —}
+\For{each feature $d = 1, \dots, D$}
+    \State $\tilde{F}_{t,d} \gets \bigl(F_{t,d} - \hat{\mu}_d\bigr) / \hat{\sigma}_d$ \Comment{Z-score normalisation}
+\EndFor
+
+\Statex
+\Statex \textbf{— Stage 3: Dimensionality Reduction —}
+\State $\mathbf{U}, \mathbf{\Sigma}, \mathbf{V}^\top \gets \operatorname{SVD}(\tilde{\mathbf{F}})$
+\State Select $d^{*} = \min\bigl\{d : \sum_{i=1}^{d} \sigma_i^2 \big/ \sum_{i=1}^{D} \sigma_i^2 \geq \alpha \bigr\}$
+\State $\mathbf{X} \gets \tilde{\mathbf{F}} \, \mathbf{V}_{:, 1:d^{*}} \in \mathbb{R}^{T' \times d^{*}}$ \Comment{Project onto top $d^{*}$ PCs}
+
+\Statex
+\Statex \textbf{— Stage 4: Optimal $K$ Selection —}
+\For{$K = K_{\min}, \dots, K_{\max}$}
+    \State Run K-Means on $\mathbf{X}$ with $K$ clusters
+    \State Record inertia $\mathcal{I}(K)$ and silhouette score $\mathcal{S}(K)$
+\EndFor
+\State $K^{*} \gets \arg\max_{K} \; \mathcal{S}(K)$ \Comment{Best silhouette}
+
+\Statex
+\Statex \textbf{— Stage 5: Final Clustering —}
+\State $\hat{\ell}_1, \dots, \hat{\ell}_{T'} \gets \operatorname{KMeans}(\mathbf{X},\; K^{*})$
+
+\Statex
+\Statex \textbf{— Stage 6: Regime Ordering —}
+\For{each cluster $k = 0, \dots, K^{*}\!-\!1$}
+    \State $\bar{r}_k \gets \operatorname{mean}\!\bigl(\{r_t : \hat{\ell}_t = k\}\bigr)$ \Comment{Mean basket return}
+\EndFor
+\State $\pi \gets \operatorname{argsort}\!\bigl(\bar{r}_0, \dots, \bar{r}_{K^{*}-1}\bigr)$ \Comment{Rank worst $\to$ best}
+\State $\ell_t \gets \pi^{-1}(\hat{\ell}_t) \quad \forall\, t$ \Comment{Relabel: $0$ = bearish, $K^{*}\!-\!1$ = bullish}
+
+\Statex
+\State \Return $\boldsymbol{\ell} = (\ell_1, \dots, \ell_{T'})$
+
+\end{algorithmic}
+\end{algorithm}
+
+% ─────────────────────────────────────────────────────────────
+\section{Results}
+
+% ─────────────────────────────────────────────────────────────
+\section{Conclusion}
+
+\end{document}

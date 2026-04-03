@@ -1,0 +1,24 @@
+\section{Hidden Markov Models with Gaussian Mixtures (GMMHMM)}
+
+Hidden Markov Models are used in sequence prediciton where states are hidden and cannot be directly observed. 
+It models two stochastic processses: a hidden Markov chain of states, and a directly visible set of observations dependent on those states.
+
+The Markovian property asserts that the current state depends only on the previous state, not the entire history. For states $ S_1, S_2, ... , S_t $
+\[ \mathbb{P}(S_t = a | S_1,S_2,..., S_{t-1}) = \mathbb{P}(S_t = a |S_{t-1}) \]
+
+The model is specified by a set of features and a number of regimes.
+It returns a set of transition probabilites, $ A_{i,j}$ , where $ \sum_j A_{i,j} = 1$ and \[ A_{i,j} = \mathbb{P}(S_{t} = j | S_{t-1} = i)\] and $i,j$ are regime states.
+
+In addition, the model computes an emission distribtion for observed states conditional on the hidden state. Formally, for observed state $X_t$, we say that  $ X_t | S_t = i \sim \mathcal{N}(\mu_i,\,\Sigma_i)$ A standard Hidden Markov model uses a single Gaussian distrubtion for each hidden state. However, markets are often heavy tailed and skewed, and a single gaussian distbrution may not accurately capture these properties. We therefore use a mixture of Gaussian distrutions, the combination of which more accurately models the extreme events in markets. With a gaussian mixture $$ X_t \mid S_t = i \sim \sum_k^{m} w_{i,k} \mathcal{N}(\mu_{i,k}, \Sigma_{i,k}) $$ where $m$ represents the number of mixtures, $w_{i,k}$ is the mixture weight such that $\sum_{k} w_{i,k} = 1, \text{ and } \mu_{i,k}, \Sigma_{i,k}$ represent the mixture mean and covariance.
+
+# Procedure
+
+* The GMMHMM randomly initalises a transition matrix A, mean and covariances for the Gaussians and mixture weights for each state distribution  where hidden states $S_t \in \{1, \dots, K\}$
+* The model then peforms a Baum–Welch (EM) algorithm 
+* In the expectation step, the algorithm computes the probabilty of hidden states and mixture components using the observed data
+* In the maximisation step, the model parameters are reselected after log likelihood maximisation
+* The algorithm is repeatedly run until desired refinement is reached - the number of cyles is a hyperparameter
+
+
+For this work, the hidden states are the market regimes. 
+The number of regimes is selected via minimising BIC. The number of mixtures is a hyperparameter.

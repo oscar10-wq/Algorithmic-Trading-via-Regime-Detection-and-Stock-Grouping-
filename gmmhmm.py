@@ -486,16 +486,24 @@ class HMMRegimeDetector:
         if signals is None:
             signals = self.generate_signals()
 
-        basket_ret = np.log(self.close / self.close.shift(1)).mean(axis=1)
-        basket_ret = basket_ret.reindex(signals.index)
+        # Use simple (arithmetic) returns so weighting is valid
+        simple_ret = (self.close / self.close.shift(1) - 1).mean(axis=1)
+        simple_ret = simple_ret.reindex(signals.index)
 
         bt = pd.DataFrame(index=signals.index)
-        bt["basket_ret"] = basket_ret
-        bt["strategy_ret"] = basket_ret * signals["weight"]
-        bt["cum_basket"] = initial_capital * bt["basket_ret"].cumsum().apply(np.exp)
-        bt["cum_strategy"] = initial_capital * bt["strategy_ret"].cumsum().apply(np.exp)
-        bt["sharpe_basket"] = (bt["basket_ret"].mean() / bt["basket_ret"].std()) * np.sqrt(252) if bt["basket_ret"].std() > 0 else 0.0
-        bt["sharpe_strategy"] = (bt["strategy_ret"].mean() / bt["strategy_ret"].std()) * np.sqrt(252) if bt["strategy_ret"].std() > 0 else 0.0
+        bt["basket_ret"] = simple_ret
+        bt["strategy_ret"] = simple_ret * signals["weight"]
+
+        # Cumulative returns via compounding simple returns
+        bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()
+        bt["cum_strategy"] = initial_capital * (1 + bt["strategy_ret"]).cumprod()
+
+        # Sharpe ratios (single scalar, not a column repeated across rows)
+        std_basket = bt["basket_ret"].std()
+        std_strategy = bt["strategy_ret"].std()
+        bt["sharpe_basket"] = (bt["basket_ret"].mean() / std_basket * np.sqrt(252)) if std_basket > 0 else 0.0
+        bt["sharpe_strategy"] = (bt["strategy_ret"].mean() / std_strategy * np.sqrt(252)) if std_strategy > 0 else 0.0
+
         return bt
 
     def plot_regimes(self, figsize: Tuple[int, int] = (18, 14)):

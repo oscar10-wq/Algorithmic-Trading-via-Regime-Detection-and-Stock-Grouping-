@@ -401,6 +401,7 @@ class RegimeDetector:
         import algo_regime.src.metrics as mt
 
         N = self.close.shape[0]
+        print(f"shape of close: {self.close.shape}")
         _, _, labels_skmeans = ws.max_mccd_unifortho_sim(N_S, self.close, self.n_regimes, L = L,  epsilon = 1e-6, h1 = h1, h2 = h2, metric = "CVaR")
         transformed_labels = mt.convert_prediction(N, labels_skmeans, h1, h2)
         self.labels_skmeans = pd.Series(transformed_labels.ravel(), index=self.close.index, name="regime_sWkmeans")
@@ -502,59 +503,76 @@ class RegimeDetector:
         if self.labels_skmeans is not None:
             signals_skmeans = pd.DataFrame(index=self.close.index)
             signals_skmeans["regime_skmeans"] = self.labels_skmeans.map(weight_map)
+            #signals_skmeans = signals_skmeans.reindex(signals.index)
+            signals_skmeans = signals_skmeans.loc[signals_skmeans.index.isin(signals.index)]
         signals_skmeans = signals_skmeans if self.labels_skmeans is not None else None
         return signals, signals_skmeans
 
-    # ── back-test helper ─────────────────────────────────────────────────
-    def backtest(self, initial_capital = 100, signals: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+   # ── back-test helper ─────────────────────────────────────────────────
+    def backtest(self, initial_capital=100, signals: Optional[pd.DataFrame] = None) -> pd.DataFrame:
         """
         Simple long-only back-test: basket return × regime weight.
-
         Returns DataFrame with columns:
             basket_ret, strategy_ret, cum_basket, cum_strategy, sharpe_basket, sharpe_strategy
         """
         if signals is None:
-            signals,_ = self.generate_signals()
+            signals, _ = self.generate_signals()
 
-        basket_ret = np.log(self.close / self.close.shift(1)).mean(axis=1)
-        basket_ret = basket_ret.reindex(signals.index)
-
-        initial_capital = initial_capital
+        # Use simple (arithmetic) returns so weighting is valid
+        simple_ret = (self.close / self.close.shift(1) - 1).mean(axis=1)
+        simple_ret = simple_ret.reindex(signals.index)
 
         bt = pd.DataFrame(index=signals.index)
-        bt["basket_ret"] = basket_ret 
-        bt["strategy_ret"] = basket_ret * signals["weight"] 
-        bt["strategy_ret_ptt"] = basket_ret * signals["weight_ptt"] if "weight_ptt" in signals.columns else np.nan
+        bt["basket_ret"] = simple_ret
+        bt["strategy_ret"] = simple_ret * signals["weight"]
 
-        
-        bt["cum_basket"] = initial_capital* bt["basket_ret"].cumsum().apply(np.exp)
-        bt["cum_strategy"] = initial_capital* bt["strategy_ret"].cumsum().apply(np.exp)
-        bt["cum_strategy_ptt"] = initial_capital* bt["strategy_ret_ptt"].cumsum().apply(np.exp) if "strategy_ret_ptt" in bt.columns else np.nan
-        
-        bt["sharpe_basket"] = (bt["basket_ret"].mean() / bt["basket_ret"].std()) * np.sqrt(252) if bt["basket_ret"].std() > 0 else 0.0
-        bt["sharpe_strategy"] = (bt["strategy_ret"].mean() / bt["strategy_ret"].std()) * np.sqrt(252) if bt["strategy_ret"].std() > 0 else 0.0
-        bt["sharpe_strategy_ptt"] = (bt["strategy_ret_ptt"].mean() / bt["strategy_ret_ptt"].std()) * np.sqrt(252) if bt["strategy_ret_ptt"].std() > 0 else 0.0 if "strategy_ret_ptt" in bt.columns else np.nan
+        if "weight_ptt" in signals.columns:
+            bt["strategy_ret_ptt"] = simple_ret * signals["weight_ptt"]
+
+        # Cumulative returns via compounding simple returns
+        bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()
+        bt["cum_strategy"] = initial_capital * (1 + bt["strategy_ret"]).cumprod()
+
+        if "strategy_ret_ptt" in bt.columns:
+            bt["cum_strategy_ptt"] = initial_capital * (1 + bt["strategy_ret_ptt"]).cumprod()
+
+        # Sharpe ratios
+        std_basket = bt["basket_ret"].std()
+        std_strategy = bt["strategy_ret"].std()
+        bt["sharpe_basket"] = (bt["basket_ret"].mean() / std_basket * np.sqrt(252)) if std_basket > 0 else 0.0
+        bt["sharpe_strategy"] = (bt["strategy_ret"].mean() / std_strategy * np.sqrt(252)) if std_strategy > 0 else 0.0
+
+        if "strategy_ret_ptt" in bt.columns:
+            std_ptt = bt["strategy_ret_ptt"].std()
+            bt["sharpe_strategy_ptt"] = (bt["strategy_ret_ptt"].mean() / std_ptt * np.sqrt(252)) if std_ptt > 0 else 0.0
+
         return bt
-    
-    def backtest_skmeans(self, initial_capital = 100, signals: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+
+    def backtest_skmeans(self, initial_capital=100, signals: Optional[pd.DataFrame] = None) -> pd.DataFrame:
         """
         Back-test for sWkmeans regime detection.
         """
         if signals is None:
             _, signals = self.generate_signals()
 
-        basket_ret = np.log(self.close / self.close.shift(1)).mean(axis=1)
-        basket_ret = basket_ret.reindex(signals.index)
-
-        initial_capital = initial_capital
+        # Use simple (arithmetic) returns so weighting is valid
+        simple_ret = (self.close / self.close.shift(1) - 1).mean(axis=1)
+        simple_ret = simple_ret.reindex(signals.index)
 
         bt = pd.DataFrame(index=signals.index)
-        bt["basket_ret"] = basket_ret 
-        bt["strategy_ret_skmeans"] = basket_ret * signals["regime_skmeans"] 
-        bt["cum_basket"] = initial_capital* bt["basket_ret"].cumsum().apply(np.exp)
-        bt["cum_strategy_skmeans"] = initial_capital* bt["strategy_ret_skmeans"].cumsum().apply(np.exp)
-        bt["sharpe_basket"] = (bt["basket_ret"].mean() / bt["basket_ret"].std()) * np.sqrt(252) if bt["basket_ret"].std() > 0 else 0.0
-        bt["sharpe_strategy_skmeans"] = (bt["strategy_ret_skmeans"].mean() / bt["strategy_ret_skmeans"].std()) * np.sqrt(252) if bt["strategy_ret_skmeans"].std() > 0 else 0.0
+        bt["basket_ret"] = simple_ret
+        bt["strategy_ret_skmeans"] = simple_ret * signals["regime_skmeans"]
+
+        # Cumulative returns via compounding simple returns
+        bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()
+        bt["cum_strategy_skmeans"] = initial_capital * (1 + bt["strategy_ret_skmeans"]).cumprod()
+
+        # Sharpe ratios
+        std_basket = bt["basket_ret"].std()
+        std_skmeans = bt["strategy_ret_skmeans"].std()
+        bt["sharpe_basket"] = (bt["basket_ret"].mean() / std_basket * np.sqrt(252)) if std_basket > 0 else 0.0
+        bt["sharpe_strategy_skmeans"] = (bt["strategy_ret_skmeans"].mean() / std_skmeans * np.sqrt(252)) if std_skmeans > 0 else 0.0
+
         return bt
 
     # ── plotting ─────────────────────────────────────────────────────────

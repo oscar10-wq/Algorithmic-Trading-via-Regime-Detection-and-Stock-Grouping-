@@ -6,6 +6,8 @@
 \usepackage{microtype}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
+\usepackage{graphicx}
+\usepackage{grabbox}
 
 % ── Page geometry ────────────────────────────────────────────
 \usepackage[
@@ -106,6 +108,9 @@ Asia    & Hang Seng   & \texttt{\^{}HSI}   \\
 \end{tabular}
 \end{table}
 
+We test our algorithm on 3 different regions each time using the 3 indices from that region, so that we can compare the results across different markets and time periods.
+
+
 \subsection{Raw Data Structure}
 Each index is downloaded from Yahoo Finance with daily OHLCV columns:
 \texttt{Date}, \texttt{Open}, \texttt{High}, \texttt{Low}, \texttt{Close}, and \texttt{Volume}.
@@ -135,6 +140,7 @@ $\bigl(T,\; 9 \times (3 \text{ returns} + 2 \text{ volatilities})\bigr) = (T, 45
 columns, where each row corresponds to one trading day and each column to a
 pair \texttt{(index\_name, feature\_name)}.
 
+\paragraph{Rolling Correlation.}
 In order to capture the dynamic nature of regime, features are computed in a rolling window fashion, so that the feature vector at time $t$ is based on data from the previous $w$ days.
 For example, the rolling correlation between two indices $X$ and $Y$ at time $t$ with window $w$ is computed as:
 \begin{equation}
@@ -143,11 +149,45 @@ For example, the rolling correlation between two indices $X$ and $Y$ at time $t$
 \end{equation}
 where $\bar{r}_X$ and $\bar{r}_Y$ are the mean returns of indices $X$ and $Y$ over the window $w$.
 
-We additionally compute momentum Z-score features to measure mean-reversion by normalising the distance between the current price and the moving average by the rolling volatility:
+\paragraph{Z-score} We additionally compute momentum Z-score features to measure mean-reversion by normalising the distance between the current price and the moving average by the rolling volatility:
 \begin{equation}
 \label{eq:zscore}
     Z_{t,w} = \frac{P_t - \operatorname{MA}_{t,w}}{\sigma_{t,w}}
 \end{equation}
+
+\paragraph{RSI}
+Finally, we compute the Relative Strength Index (RSI) to capture overbought and oversold conditions. Mathematically, this translates to the following: 
+\begin{equation}
+\label{eq:rsi}
+    \text{RSI}_{t} = 100 - \frac{100}{1 + \frac{\text{Average Gain}_{t}}{\text{Average Loss}_{t}}}  
+\end{equation}
+where $\text{Average Gain}_{t}$ and $\text{Average Loss}_{t}$ are computed over a specified period (commonly 14 days) as the average of positive and negative price changes, respectively.
+
+\paragraph{Building feature set}
+We then merge for all the indices the features (log-returns lagged , rolling volatility, correlation, z-score, RSI) into a  single DataFrame. 
+We compute the 1 day, 5 day, and 21 day log-returns for each index, as well as the rolling volatility with windows of 21 and 63 days which gives us 15 features in total. 
+Moreover, we compute the rolling pearson-correlation on a 63-day window for each pair of indices, resulting in 3 correlation features.
+Finally, we compute the momentum z-score on 63-day window and the RSI with a 14-day period for each index, adding 6 more features.
+Hence, the final raw feature matrix, has 24 columns with the number of rows associated to the number of trading days minus the warm-up period for the rolling features.
+The number of rows depend on the considered region. For instance, for the American indices the period from 2006 to 2020, account for 3523 trading days. The warm-up period accounts for 63 days, since th biggest rolling window is 63 days, which means that the final feature matrix has exactly 3460 rows and 24 columns.
+We then scale the features using standardisation and apply PCA to reduce dimensionality before feeding the data into the clustering algorithm.
+The number of principal components is selected to retain 95\% of the variance, which results in a reduced feature space of 7 dimensions for American Indices, 10 dimensions for European Indices, and 14 dimensions for Asian Indices.
+The following tables summarise the feature engineering process and the resulting feature set dimensions for each region after PCA.
+\begin{table}[H]
+\centering
+\caption{Feature engineering summary.}
+\label{tab:feature_engineering}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{l l l}
+\toprule
+\textbf{Region} & \textbf{Feature Set Dimensions} \\
+\midrule
+America & (3460, 7) (after PCA) \\
+Europe  & (3523, 10) (after PCA) \\
+Asia    & (3561, 14) (after PCA) \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \subsection{Pipeline Summary}
 
@@ -165,7 +205,7 @@ $\big\downarrow$ \\
 Close prices only (simple DataFrame) \\
 $\big\downarrow$ \\
 \begin{tabular}{c@{\hspace{2em}}c}
-Log-returns (1d, 5d, 21d) & Rolling volatility (21d, 63d) \\
+Log-returns (1d, 5d, 21d) & Feature Engineerin \\
 \end{tabular} \\
 $\big\downarrow$ \\
 \textbf{Feature matrix $\rightarrow$ Clustering / PCA} \\
@@ -178,6 +218,8 @@ $\big\downarrow$ \\
 % ─────────────────────────────────────────────────────────────
 \section{Mathematical Foundations}
 In this project we apply two main machine learning techniques for regime detection: k-means clustering and Principal Component Analysis (PCA).
+We then compare the results of these techniques against a more traditional approach to regime detection, the Hidden Markov Model with Gaussian Mixtures (GMMHMM).
+This section therefore provides the mathematical foundations for these three techniques, starting with k-means and PCA, and then moving on to GMMHMM. 
 
 \subsection{K-Means Clustering}
 K-means clustering is an unsupervised learning algorithm that partitions the data into $K$ clusters by minimising the within-cluster sum of squares. The algorithm iteratively assigns each data point to the nearest cluster centroid and then updates the centroids based on the assigned points.
@@ -193,10 +235,52 @@ However, when dealing with higher-dimensional data, the standard k-means algorit
 To address this, one can reduce dimensionality using PCA before applying k-means.
 
 \subsection{Principal Component Analysis (PCA)}
+We use PCA to reduce the dimensionality of our feature space. In our case we reduce the 24 features from the 3 indices within a region, into a smaller set of principal components that capture the majority of the variance in the data.
+PCA works by finding the eigenvectors of the covariance matrix $\mathbf{\Sigma}$ of the data, which represent the directions of maximum variance. The eigenvalues associated with these eigenvectors indicate the amount of variance captured by each principal component.
+Mathematically, we express this in the following way:
+\begin{equation}
+\label{eq:pca}
+\mathbf{X} = \mathbf{U} \mathbf{\Sigma} \mathbf{V}^\top
+\end{equation}
+where $\mathbf{X}$ is the centered data matrix, $\mathbf{U}$ contains the left singular vectors, $\mathbf{\Sigma}$ is a diagonal matrix of singular values, and $\mathbf{V}$ contains the right singular vectors (principal components). We select the top $d^{*}$ components that retain a specified percentage of the variance (e.g., 95\%).
+
+\section{Hidden Markov Models with Gaussian Mixtures (GMMHMM)}
+Hidden Markov Models are used in sequence prediciton where states are hidden and cannot be directly observed. 
+It models two stochastic processses: a hidden Markov chain of states, and a directly visible set of observations dependent on those states.
+
+The Markovian property asserts that the current state depends only on the previous state, not the entire history. For states $ S_1, S_2, ... , S_t $: 
+\begin{equation}
+\mathbb{P}(S_t = a | S_1,S_2,..., S_{t-1}) = \mathbb{P}(S_t = a |S_{t-1}) 
+\end{equation}
+
+The model is specified by a set of features and a number of regimes.
+It returns a set of transition probabilites, $ A_{i,j}$ , where $ \sum_j A_{i,j} = 1$ and 
+\begin{equation}
+A_{i,j} = \mathbb{P}(S_{t} = j | S_{t-1} = i)
+\end{equation}
+and $i,j$ are regime states.
+
+In addition, the model computes an emission distribtion for observed states conditional on the hidden state. Formally, for observed state $X_t$, we say that  $ X_t | S_t = i \sim \mathcal{N}(\mu_i,\,\Sigma_i)$ A standard Hidden Markov model uses a single Gaussian distrubtion for each hidden state. However, markets are often heavy tailed and skewed, and a single gaussian distbrution may not accurately capture these properties. We therefore use a mixture of Gaussian distrutions, the combination of which more accurately models the extreme events in markets. With a gaussian mixture 
+\begin{equation}
+X_t \mid S_t = i \sim \sum_k^{m} w_{i,k} \mathcal{N}(\mu_{i,k}, \Sigma_{i,k})
+\end{equation}
+where $m$ represents the number of mixtures, $w_{i,k}$ is the mixture weight such that $\sum_{k} w_{i,k} = 1, \text{ and } \mu_{i,k}, \Sigma_{i,k}$ represent the mixture mean and covariance.
+
+Procedure:
+\begin{enumerate}
+    \item The GMMHMM randomly initalises a transition matrix A, mean and covariances for the Gaussians and mixture weights for each state distribution  where hidden states $S_t \in \{1, \dots, K\}$
+    \item The model then peforms a Baum–Welch (EM) algorithm   
+    \item In the expectation step, the algorithm computes the probabilty of hidden states and mixture components using the observed data
+    \item In the maximisation step, the model parameters are reselected after log likelihood maximisation
+    \item The algorithm is repeatedly run until desired refinement is reached - the number of cyles is a hyperparameter
+\end{enumerate}
+
+For this work, the hidden states are the market regimes. 
+The number of regimes is selected via minimising BIC. The number of mixtures is a hyperparameter.
 
 % ─────────────────────────────────────────────────────────────
 \section{Proposed Algorithm}
-We propose the following algorithm for regime detection: 
+In this section, we present the complete pipeline for regime detection using k-means clustering and PCA. The algorithm consists of the following stages:
 \begin{algorithm}[H]
 \caption{K-Means Regime Detection Pipeline}
 \label{alg:regime_detection}
@@ -262,9 +346,40 @@ We propose the following algorithm for regime detection:
 \end{algorithmic}
 \end{algorithm}
 
+
 % ─────────────────────────────────────────────────────────────
 \section{Results}
 
+In order to evaluate the performance of our proposed k-means and PCA pipeline for regime detection, we compare the results against a more traditional approach using Hidden Markov Models with Gaussian Mixtures (GMMHMM). 
+We also compared the results with a peak-to-trough method, which is a simple rule-based approach that identifies market regimes based on the peaks and troughs of the index values. We parametrized this peak-to-trough method by setting the maximum drawdown threshold to 20\%, which means that a new regime is identified whenever the index experiences a drawdown of 20\% or more from its previous peak.
+Mathematically, we define the drawdown at time $t$ as:
+\begin{equation}
+\text{Drawdown}_t = \frac{P_t - P_{\text{peak}}}{P_{\text{peak}}}
+\end{equation}
+where $P_{\text{peak}}$ is the maximum index value observed up to time $t$. A new regime is triggered when $\text{Drawdown}_t \leq -0.20$.
+We then compare the different regime labelling methods, by creating non-realistic trading strategies, that go long when the label indicates bullish regime and flat when the label indicates bearish regime, and we compare the resulting cumulative returns of these strategies across the different labelling methods.
+For american indices we observe the following :
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{graphs/cumulative_returns_comparison_america.png}
+\caption{Cumulative returns of trading strategies based on different regime detection methods for American indices.}
+\label{fig:cumulative_returns_america}
+\end{figure}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{graphs/cumulative_returns_comparison_europe.png}
+\caption{Cumulative returns of trading strategies based on different regime detection methods for European indices.}
+\label{fig:cumulative_returns_europe}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{graphs/cumulative_returns_comparison_asia.png}
+    \caption{Cumulative returns of trading strategies based on different regime detection methods for Asian indices.}
+    \label{fig:cumulative_returns_asia}
+\end{figure}
+
+We obse
 % ─────────────────────────────────────────────────────────────
 \section{Conclusion}
 

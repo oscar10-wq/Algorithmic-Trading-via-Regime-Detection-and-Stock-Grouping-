@@ -33,6 +33,5 @@ data/
 
 
 
-report.pdf
 __pycache__/
 *.synctex.gz

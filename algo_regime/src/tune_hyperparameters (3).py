@@ -1,7 +1,7 @@
 """
 tune_hyperparameters.py
 -----------------------
-I wrote this script to systematically find the best hyperparameter settings
+This systematically finds the best hyperparameter settings
 for the RegimeDetector model. Rather than guessing which settings work best,
 this tests every combination automatically and scores each one so we can
 make a data-driven decision about what to use in the final model.

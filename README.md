@@ -7,3 +7,5 @@
 - Daniel Greenstein
 - Oscar Peyron
 
+
+**Description of the project**

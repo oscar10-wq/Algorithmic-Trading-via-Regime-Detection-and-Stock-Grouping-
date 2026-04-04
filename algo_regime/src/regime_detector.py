@@ -135,6 +135,7 @@ def build_features(
         _rsi(close, rsi_period),
     ]
     features = pd.concat(parts, axis=1).dropna()
+    print(features.columns)
     logger.info("Feature matrix: %d rows × %d cols", *features.shape)
     return features
 
@@ -177,6 +178,7 @@ def select_k(
 
     for k in k_range:
         km = KMeans(n_clusters=k, n_init=n_init, random_state=random_state)
+        print(f'Fitting KMeans for k={k}... with X shape {X.shape}')
         labels = km.fit_predict(X)
         inertias.append(km.inertia_)
         silhouettes.append(silhouette_score(X, labels))
@@ -210,6 +212,7 @@ def _plot_elbw_silhouette(k_selection: KSelectionResult):
     fig.legend(loc="upper right", fontsize=8)
     plt.tight_layout()
     plt.show()
+    return fig
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -332,6 +335,7 @@ class RegimeDetector:
         self.scaler = StandardScaler()
         self.features_scaled = self.scaler.fit_transform(self.features_raw)
 
+        print(self.features_raw.shape)
         # 3. optional PCA
         if self.use_pca:
             self.pca = PCA(n_components=self.pca_variance, random_state=self.random_state)
@@ -346,6 +350,7 @@ class RegimeDetector:
             self.features_reduced = self.features_scaled
 
         X = self.features_reduced
+        print(X.shape)
 
         print(f"shape of feature_reduced: {X.shape}")
         # 4. select K
@@ -581,7 +586,7 @@ class RegimeDetector:
         """Plot elbow + silhouette diagnostics for K selection."""
         if self.k_selection is None:
             raise RuntimeError("Call .fit() first.")
-        _plot_elbw_silhouette(self.k_selection)
+        return _plot_elbw_silhouette(self.k_selection)
 
     def plot_regime_profile(self, figsize: Tuple[int, int] = (10,8)):
         import matplotlib.pyplot as plt

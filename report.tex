@@ -425,7 +425,22 @@ In the European indices, PCA K-Means achieves the largest relative advantage ove
 In the Asian indices, although PCA K-Means remains the strongest method, the gap relative to HMM and sWK-Means is narrower. This is consistent with the higher retained PCA dimensionality reported earlier, suggesting a more heterogeneous market structure across the KOSPI, Nikkei 225, and Hang Seng, where alternative methods can still capture part of the regime variation.
 
 \subsection{Hyperparameter tuning}
-
+\begin{table}[h]
+\centering
+\caption{Top 5 hyperparameter configurations for PCA K-Means on the European dataset, ranked by combined score.}
+\begin{tabular}{ccccccccc}
+\hline
+Rank & $K$ & PCA & PCA Var. & Return Periods & Vol Windows & Silhouette & Sharpe & Combined \\
+\hline
+1 & 2 & True  & 0.90 & [1,5,21]     & [21,63]     & 0.2754 & 4.1912 & 0.8362 \\
+2 & 2 & True  & 0.95 & [1,5,21]     & [21,63]     & 0.2618 & 4.1837 & 0.8282 \\
+3 & 2 & False & N/A  & [1,5,21]     & [21,63]     & 0.2508 & 4.1650 & 0.8196 \\
+4 & 3 & True  & 0.90 & [1,5,21,63]  & [10,21,63]  & 0.2498 & 3.8258 & 0.7625 \\
+5 & 3 & True  & 0.95 & [1,5,21,63]  & [10,21,63]  & 0.2319 & 3.7807 & 0.7461 \\
+\hline
+\end{tabular}
+\label{tab:tuning_top5}
+\end{table}
 % ─────────────────────────────────────────────────────────────
 \section{Conclusion}
 We have presented a PCA-enhanced k-means clustering pipeline for market regime detection across American, European, and Asian equity indices. The method consistently identifies two dominant regimes (bullish and bearish) that align well with known periods of market stress. When used to drive a simple long/flat trading strategy, the PCA K-Means approach delivers substantially higher cumulative returns and Sharpe ratios than alternative methods (GMMHMM, sliced-Wasserstein k-means, peak-to-trough labelling) and the long-only benchmark across all three regions.

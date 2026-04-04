@@ -425,22 +425,59 @@ In the European indices, PCA K-Means achieves the largest relative advantage ove
 In the Asian indices, although PCA K-Means remains the strongest method, the gap relative to HMM and sWK-Means is narrower. This is consistent with the higher retained PCA dimensionality reported earlier, suggesting a more heterogeneous market structure across the KOSPI, Nikkei 225, and Hang Seng, where alternative methods can still capture part of the regime variation.
 
 \subsection{Hyperparameter tuning}
+
+
+To further validate the PCA K-Means specification, we performed a grid search over several key hyperparameters for each regional dataset. Specifically, we varied the number of regimes, whether PCA was applied, the retained PCA variance, and alternative return and volatility horizons. 
+The hyperparameter grid is shown in Table~\ref{tab:tuning_grid}.
 \begin{table}[h]
 \centering
-\caption{Top 5 hyperparameter configurations for PCA K-Means on the European dataset, ranked by combined score.}
-\begin{tabular}{ccccccccc}
+\caption{Hyperparameter grid for PCA K-Means tuning.}
+\begin{tabular}{ll}
 \hline
-Rank & $K$ & PCA & PCA Var. & Return Periods & Vol Windows & Silhouette & Sharpe & Combined \\
+Hyperparameter & Values \\
 \hline
-1 & 2 & True  & 0.90 & [1,5,21]     & [21,63]     & 0.2754 & 4.1912 & 0.8362 \\
-2 & 2 & True  & 0.95 & [1,5,21]     & [21,63]     & 0.2618 & 4.1837 & 0.8282 \\
-3 & 2 & False & N/A  & [1,5,21]     & [21,63]     & 0.2508 & 4.1650 & 0.8196 \\
-4 & 3 & True  & 0.90 & [1,5,21,63]  & [10,21,63]  & 0.2498 & 3.8258 & 0.7625 \\
-5 & 3 & True  & 0.95 & [1,5,21,63]  & [10,21,63]  & 0.2319 & 3.7807 & 0.7461 \\
+$n\_regimes$ & $\{2,3,4,5\}$ \\
+\texttt{use\_pca} & \{\texttt{True}, \texttt{False}\} \\
+\texttt{pca\_variance} & $\{0.90, 0.95\}$ \\
+\texttt{return\_periods} & \{[1,5,21], [1,5,21,63]\} \\
+\texttt{vol\_windows} & \{[21,63], [10,21,63]\} \\
 \hline
 \end{tabular}
-\label{tab:tuning_top5}
+\label{tab:tuning_grid}
 \end{table}
+
+Each specification was evaluated using both the silhouette score and the Sharpe ratio of the corresponding regime-based trading strategy. The silhouette score measures how clearly separated the detected clusters are, while the Sharpe ratio measures the risk-adjusted return of the resulting strategy.
+To balance clustering quality and trading usefulness, we defined a combined score as an equally weighted average of the silhouette score and a rescaled Sharpe ratio:
+\begin{equation}
+\label{eq:combined_score}
+\text{Combined Score}
+=
+0.5 \times \text{Silhouette}
++
+0.5 \times \frac{\text{Sharpe}}{3}.
+\end{equation}
+
+\begin{table}[h]
+\centering
+\caption{Best hyperparameter configuration by region.}
+\begin{tabular}{lcccccccc}
+\hline
+Region & $K$ & PCA & PCA Var. & Return Periods & Vol Windows & Silhouette & Sharpe & Combined \\
+\hline
+America & 2 & True & 0.90 & [1,5,21] & [21,63] & 0.3227 & 4.5167 & 0.9141 \\
+Europe  & 2 & True & 0.90 & [1,5,21] & [21,63] & 0.2754 & 4.1912 & 0.8362 \\
+Asia    & 2 & True & 0.90 & [1,5,21] & [21,63] & 0.2029 & 4.3604 & 0.8282 \\
+\hline
+\end{tabular}
+\label{tab:tuning_best_by_region}
+\end{table}
+
+The tuning results are remarkably consistent across regions. The detailed tuning results for each region are reported in the Appendix. As shown in Table~\ref{tab:tuning_best_by_region}, the best-performing specification is the same in all three markets: \(K=2\), with PCA enabled, 90\% retained variance, return periods of \([1,5,21]\), and volatility windows of \([21,63]\). This strongly supports the main model specification and confirms that a simple two-regime structure is most effective under the current feature design.
+The consistency of the top-ranked configuration also suggests that PCA provides a useful, though moderate, improvement. In all three markets, the best non-PCA specification ranks just below the top PCA-based models, indicating that the raw feature set is already informative, while PCA mainly helps by removing redundant variation and producing a more compact representation. Similarly, retaining 90\% of variance slightly outperforms retaining 95\%, which suggests that a more aggressive dimensionality reduction can reduce noise without losing the key structure needed for clustering.
+
+The tuning results also highlight meaningful regional differences. The American market achieves the highest silhouette and combined score, indicating the clearest regime separation and the strongest overall clustering structure. Europe ranks second, while Asia has the lowest silhouette score, although its Sharpe ratio remains strong. This pattern is consistent with the earlier interpretation that the Asian indices are more heterogeneous, making their regimes harder to separate cleanly in feature space, while the stronger co-movement in the American indices leads to more clearly defined market states.
+
+Adding a 63-day return horizon or a 10-day volatility window does not improve the best result. This suggests that the baseline feature set already captures the main regime information, while additional short- or long-horizon features are more likely to introduce complexity than to improve performance.
 % ─────────────────────────────────────────────────────────────
 \section{Conclusion}
 We have presented a PCA-enhanced k-means clustering pipeline for market regime detection across American, European, and Asian equity indices. The method consistently identifies two dominant regimes (bullish and bearish) that align well with known periods of market stress. When used to drive a simple long/flat trading strategy, the PCA K-Means approach delivers substantially higher cumulative returns and Sharpe ratios than alternative methods (GMMHMM, sliced-Wasserstein k-means, peak-to-trough labelling) and the long-only benchmark across all three regions.
@@ -461,4 +498,81 @@ Future work could explore out-of-sample regime prediction, rolling re-estimation
 \subsection{Reflection on Team Work}
 
 
+\appendix
+
+\section{Detailed Hyperparameter Tuning Results}
+
+This appendix reports the top 10 hyperparameter configurations for each regional dataset, ranked by combined score.
+
+\subsection{American Market}
+
+\begin{table}[h]
+\centering
+\caption{Top 10 hyperparameter configurations for the American dataset.}
+\begin{tabular}{ccccccccc}
+\hline
+Rank & $K$ & PCA & PCA Var. & Return Periods & Vol Windows & Silhouette & Sharpe & Combined \\
+\hline
+1  & 2 & True  & 0.90 & [1,5,21]    & [21,63]    & 0.3227 & 4.5167 & 0.9141 \\
+2  & 2 & True  & 0.95 & [1,5,21]    & [21,63]    & 0.3091 & 4.5008 & 0.9047 \\
+3  & 2 & False & N/A  & [1,5,21]    & [21,63]    & 0.2947 & 4.5153 & 0.8999 \\
+4  & 2 & True  & 0.90 & [1,5,21]    & [10,21,63] & 0.3314 & 4.1693 & 0.8606 \\
+5  & 2 & True  & 0.95 & [1,5,21]    & [10,21,63] & 0.3148 & 4.1617 & 0.8510 \\
+6  & 2 & True  & 0.90 & [1,5,21,63] & [21,63]    & 0.3286 & 4.0854 & 0.8452 \\
+7  & 2 & False & N/A  & [1,5,21]    & [10,21,63] & 0.3030 & 4.1617 & 0.8451 \\
+8  & 2 & True  & 0.95 & [1,5,21,63] & [21,63]    & 0.3155 & 4.0989 & 0.8409 \\
+9  & 2 & False & N/A  & [1,5,21,63] & [21,63]    & 0.3018 & 4.0989 & 0.8341 \\
+10 & 3 & True  & 0.90 & [1,5,21]    & [21,63]    & 0.3191 & 3.6943 & 0.7753 \\
+\hline
+\end{tabular}
+\label{tab:tuning_america_top10}
+\end{table}
+
+\subsection{European Market}
+
+\begin{table}[h]
+\centering
+\caption{Top 10 hyperparameter configurations for the European dataset.}
+\begin{tabular}{ccccccccc}
+\hline
+Rank & $K$ & PCA & PCA Var. & Return Periods & Vol Windows & Silhouette & Sharpe & Combined \\
+\hline
+1  & 2 & True  & 0.90 & [1,5,21]    & [21,63]    & 0.2754 & 4.1912 & 0.8362 \\
+2  & 2 & True  & 0.95 & [1,5,21]    & [21,63]    & 0.2618 & 4.1837 & 0.8282 \\
+3  & 2 & False & N/A  & [1,5,21]    & [21,63]    & 0.2508 & 4.1650 & 0.8196 \\
+4  & 3 & True  & 0.90 & [1,5,21,63] & [10,21,63] & 0.2498 & 3.8258 & 0.7625 \\
+5  & 3 & True  & 0.95 & [1,5,21,63] & [10,21,63] & 0.2319 & 3.7807 & 0.7461 \\
+6  & 2 & True  & 0.90 & [1,5,21,63] & [21,63]    & 0.2818 & 3.6083 & 0.7423 \\
+7  & 3 & False & N/A  & [1,5,21,63] & [10,21,63] & 0.2179 & 3.7891 & 0.7405 \\
+8  & 2 & True  & 0.95 & [1,5,21,63] & [21,63]    & 0.2691 & 3.6115 & 0.7365 \\
+9  & 2 & False & N/A  & [1,5,21,63] & [21,63]    & 0.2562 & 3.6381 & 0.7344 \\
+10 & 4 & True  & 0.90 & [1,5,21]    & [10,21,63] & 0.2040 & 3.7728 & 0.7308 \\
+\hline
+\end{tabular}
+\label{tab:tuning_europe_top10}
+\end{table}
+
+\subsection{Asian Market}
+
+\begin{table}[h]
+\centering
+\caption{Top 10 hyperparameter configurations for the Asian dataset.}
+\begin{tabular}{ccccccccc}
+\hline
+Rank & $K$ & PCA & PCA Var. & Return Periods & Vol Windows & Silhouette & Sharpe & Combined \\
+\hline
+1  & 2 & True  & 0.90 & [1,5,21]    & [21,63]    & 0.2029 & 4.3604 & 0.8282 \\
+2  & 2 & True  & 0.95 & [1,5,21]    & [21,63]    & 0.1922 & 4.3670 & 0.8240 \\
+3  & 2 & False & N/A  & [1,5,21]    & [21,63]    & 0.1845 & 4.3743 & 0.8213 \\
+4  & 2 & True  & 0.90 & [1,5,21,63] & [21,63]    & 0.2089 & 3.7526 & 0.7299 \\
+5  & 2 & True  & 0.95 & [1,5,21,63] & [21,63]    & 0.1997 & 3.7529 & 0.7254 \\
+6  & 2 & False & N/A  & [1,5,21,63] & [21,63]    & 0.1911 & 3.7575 & 0.7218 \\
+7  & 3 & True  & 0.90 & [1,5,21]    & [21,63]    & 0.1689 & 3.7204 & 0.7045 \\
+8  & 3 & True  & 0.95 & [1,5,21]    & [21,63]    & 0.1582 & 3.7316 & 0.7011 \\
+9  & 2 & True  & 0.90 & [1,5,21]    & [10,21,63] & 0.2173 & 3.5439 & 0.6993 \\
+10 & 2 & True  & 0.95 & [1,5,21]    & [10,21,63] & 0.2059 & 3.5613 & 0.6965 \\
+\hline
+\end{tabular}
+\label{tab:tuning_asia_top10}
+\end{table}
 \end{document}

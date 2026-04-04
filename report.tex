@@ -220,6 +220,42 @@ PCA finds directions of maximum variance via the singular value decomposition of
 \end{equation}
 where $\mathbf{U}$ contains left singular vectors, $\mathbf{\Sigma}$ is a diagonal matrix of singular values, and $\mathbf{V}$ contains the principal components. We retain the top $d^{*}$ components capturing $\geq 95\%$ of variance.
 
+\subsection{Alternative Regime Detection Methods}
+
+To provide a broader comparison, we also evaluate several benchmark regime-detection methods with different modelling assumptions.
+
+\subsubsection{Gaussian-Mixture Hidden Markov Model (GMM-HMM)}
+The Hidden Markov Model assumes that the market evolves through a sequence of unobserved states, with state transitions governed by a first-order Markov chain:
+\begin{equation}
+\label{eq:hmm_transition}
+P(z_t = j \mid z_{t-1} = i) = A_{ij}
+\end{equation}
+where $A_{ij}$ denotes the probability of moving from hidden state $i$ to hidden state $j$. Conditional on the hidden state, the observed feature vector $x_t$ is modelled as a Gaussian mixture:
+\begin{equation}
+\label{eq:gmmhmm}
+p(x_t \mid z_t = k) = \sum_{m=1}^{M} \pi_{k,m} \, \mathcal{N}(x_t \mid \mu_{k,m}, \Sigma_{k,m})
+\end{equation}
+where $\pi_{k,m}$ are mixture weights, and $\mu_{k,m}, \Sigma_{k,m}$ are the corresponding mean vectors and covariance matrices. This allows the model to capture both temporal persistence in market regimes and more flexible within-state feature distributions.
+
+\subsubsection{Sliced-Wasserstein K-Means}
+Unlike standard K-means, sliced-Wasserstein K-means compares rolling return windows through their empirical distributions rather than Euclidean distances between daily feature vectors. Given two distributions $\mu$ and $\nu$, the sliced-Wasserstein distance is defined as
+\begin{equation}
+SW_p(\mu,\nu)
+=
+\left(
+\int_{\mathbb{S}^{d-1}}
+W_p^p(P_\theta\#\mu,\;P_\theta\#\nu)\, d\sigma(\theta)
+\right)^{1/p}
+\end{equation}
+where $P_\theta$ denotes projection onto direction $\theta$, $P_\theta \# \mu$ is the projected distribution, and $W_p$ is the one-dimensional Wasserstein distance. In practice, this is approximated using a finite number of random projections. This method is therefore more sensitive to changes in distributional shape and tail-risk structure across rolling windows.
+
+\subsubsection{Peak-to-Trough and Long-Only Benchmarks}
+As a simple rule-based benchmark, peak-to-trough labelling identifies crisis periods using drawdowns from the running peak of the cumulative return series:
+\begin{equation}
+\label{eq:drawdown}
+DD_t = \frac{C_t - \max_{s \leq t} C_s}{\max_{s \leq t} C_s}
+\end{equation}
+where $C_t$ denotes the cumulative portfolio value at time $t$. A period is labelled as a crisis regime whenever $DD_t$ falls below a chosen threshold. Finally, a long-only strategy is included as a passive benchmark that remains fully invested throughout the sample period.
 % ─────────────────────────────────────────────────────────────
 \section{Proposed Algorithm}
 
@@ -265,7 +301,7 @@ where $\mathbf{U}$ contains left singular vectors, $\mathbf{\Sigma}$ is a diagon
 \section{Results}
 
 \subsection{Optimal $K$ Selection}
-We applied k-means for $K \in \{2, \dots, 10\}$ on the PCA-reduced feature space and computed inertia and silhouette scores. As shown in Figure~\ref{fig:k_selection}, the silhouette score is maximised at $K=2$ across all regions, suggesting two dominant regimes over 2006--2020.
+We applied k-means for $K \in \{2, \dots, 10\}$ on the PCA-reduced feature space and computed inertia and silhouette scores. As shown in Figure~\ref{fig:k_selection}, the silhouette score is maximised at $K=2$ across all regions, suggesting two dominant regimes over 2006--2020.This result suggests that, given the sample period and feature design adopted in this study, market states are primarily characterised by two dominant structures: a relatively weak bearish regime and a relatively strong bullish regime. Relative to larger values of $K$, the two-regime specification achieves better cluster separation while avoiding the introduction of excessive noise and potential overfitting. It also preserves the stability and interpretability of the detected regimes.
 
 \begin{figure}[H]
     \centering
@@ -291,8 +327,7 @@ We applied k-means for $K \in \{2, \dots, 10\}$ on the PCA-reduced feature space
 \end{figure}
 
 \subsection{Regime Detection Results}
-Figure~\ref{fig:regime_profiles} shows the detected regimes overlaid on an equally weighted basket of indices for each region. The algorithm captures major market downturns (2008 crisis, 2011 European debt crisis, 2015--16 volatility) with high precision.
-
+Figure~\ref{fig:regime_profiles} shows the detected regimes overlaid on an equally weighted basket of indices for each region. In the figure, the red segments represent the crisis regime identified by the model, while the green segments indicate more favourable regimes. These periods broadly align with major historical episodes of market stress, including the 2008 global financial crisis, the 2011 European debt crisis, and the 2015--2016 period of heightened market volatility.
 \begin{figure}[H]
     \centering
     \begin{subfigure}[b]{0.32\textwidth}
@@ -378,6 +413,16 @@ Looking at the performance metrics, the PCA K-Means strategy achieves annualised
 We can therefore see that PCA K-means capture market regimes in a highly granuar way, as opposed to other methods which are either too noisy (sW k-means) or too coarse (peak-to-trough). The HMM performs decently but still falls short of the PCA K-Means approach, likely due to its parametric assumptions and sensitivity to regime duration.
 However, while we present performance metrics for trading strategies, those results have to be taken as a descriptive accuracy rather than a predictive accuracy, as for all regime detection methods, we have high look-ahead bias when labelling regimes. 
 This is because we are using the entire dataset to detect regimes, and then backtesting a strategy on the same dataset. Therefore, while the PCA K-Means method shows superior performance in this backtest, further work would be needed to evaluate its predictive power in an out-of-sample context.
+
+\paragraph{Method-level differences.}
+From a modelling perspective, these performance differences are consistent with the mechanisms of the methods. PCA K-Means clusters daily observations in a denoised, PCA-reduced feature space built from returns, volatility, correlations, momentum z-scores, and RSI, and the resulting regimes are then ordered by mean return. This makes the method particularly effective at separating market states that are directly relevant for trading. 
+By contrast, GMM-HMM uses the same feature set but imposes a latent-state structure with probabilistic transitions, allowing it to capture regime persistence over time at the cost of stronger modelling assumptions. Sliced-Wasserstein K-Means instead clusters rolling return windows based on distributional shape and tail-risk structure, which makes it more sensitive to local changes but also more prone to noisy regime switching. 
+Peak-to-trough labelling is more interpretable but relies only on drawdown information, while the long-only strategy provides a passive benchmark with no regime adaptation.
+
+\paragraph{Regional differences.}
+The regional results in Table 3 also highlight meaningful differences across markets. In the American indices, the advantage of PCA K-Means is likely supported by the strong co-movement among the S\&P 500, Dow Jones, and Nasdaq, which allows PCA to extract common market structure effectively; HMM also performs relatively well here, suggesting clearer regime persistence. 
+In the European indices, PCA K-Means achieves the largest relative advantage over the benchmarks, which is consistent with the more pronounced structural stress episodes in the sample, particularly the 2011 European debt crisis. 
+In the Asian indices, although PCA K-Means remains the strongest method, the gap relative to HMM and sWK-Means is narrower. This is consistent with the higher retained PCA dimensionality reported earlier, suggesting a more heterogeneous market structure across the KOSPI, Nikkei 225, and Hang Seng, where alternative methods can still capture part of the regime variation.
 
 \subsection{Hyperparameter tuning}
 

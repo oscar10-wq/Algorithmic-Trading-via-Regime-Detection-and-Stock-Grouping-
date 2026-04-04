@@ -504,6 +504,20 @@ class HMMRegimeDetector:
         bt["sharpe_basket"] = (bt["basket_ret"].mean() / std_basket * np.sqrt(252)) if std_basket > 0 else 0.0
         bt["sharpe_strategy"] = (bt["strategy_ret"].mean() / std_strategy * np.sqrt(252)) if std_strategy > 0 else 0.0
 
+        #Calmar ratios
+        max_drawdown_basket = (bt["cum_basket"].cummax() - bt["cum_basket"]).max() / bt["cum_basket"].cummax().max()
+        max_drawdown_strategy = (bt["cum_strategy"].cummax() - bt["cum_strategy"]).max() / bt["cum_strategy"].cummax().max()
+        bt["calmar_basket"] = (bt["basket_ret"].mean() * 252) / (max_drawdown_basket) if max_drawdown_basket > 0 else 0.0
+        bt["calmar_strategy"] = (bt["strategy_ret"].mean() * 252) / (max_drawdown_strategy) if max_drawdown_strategy > 0 else 0.0
+
+        # Annualised volatility
+        bt["ann_vol_basket"] = bt["basket_ret"].std() * np.sqrt(252)
+        bt["ann_vol_strategy"] = bt["strategy_ret"].std() * np.sqrt(252)
+
+        #Annualised return
+        bt["ann_ret_basket"] = bt["basket_ret"].mean() * 252
+        bt["ann_ret_strategy"] = bt["strategy_ret"].mean() * 252
+  
         return bt
 
     def plot_regimes(self, figsize: Tuple[int, int] = (18, 14)):

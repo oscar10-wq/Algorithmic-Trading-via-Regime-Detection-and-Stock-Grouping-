@@ -525,14 +525,17 @@ class RegimeDetector:
 
         # Use simple (arithmetic) returns so weighting is valid
         simple_ret = (self.close / self.close.shift(1) - 1).mean(axis=1)
+        print(f"shape of simple_ret: {simple_ret.shape}")
         simple_ret = simple_ret.reindex(signals.index)
 
         bt = pd.DataFrame(index=signals.index)
         bt["basket_ret"] = simple_ret
-        bt["strategy_ret"] = simple_ret * signals["weight"]
+
+        bt["strategy_ret"] = bt["basket_ret"] * signals["weight"]
+
 
         if "weight_ptt" in signals.columns:
-            bt["strategy_ret_ptt"] = simple_ret * signals["weight_ptt"]
+            bt["strategy_ret_ptt"] = bt["basket_ret"] * signals["weight_ptt"]
 
         # Cumulative returns via compounding simple returns
         bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()
@@ -546,10 +549,26 @@ class RegimeDetector:
         std_strategy = bt["strategy_ret"].std()
         bt["sharpe_basket"] = (bt["basket_ret"].mean() / std_basket * np.sqrt(252)) if std_basket > 0 else 0.0
         bt["sharpe_strategy"] = (bt["strategy_ret"].mean() / std_strategy * np.sqrt(252)) if std_strategy > 0 else 0.0
+       
+        #Calmar ratios (using max drawdown from cumulative returns)
+        bt["calmar_basket"] = bt["cum_basket"].iloc[-1] / abs(bt["cum_basket"].min()) if bt["cum_basket"].min() < 0 else np.inf
+        bt["calmar_strategy"] = bt["cum_strategy"].iloc[-1] / abs(bt["cum_strategy"].min()) if bt["cum_strategy"].min() < 0 else np.inf
 
+        #Annualised Return 
+        bt["ann_return_basket"] = (bt["cum_basket"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+        bt["ann_return_strategy"] = (bt["cum_strategy"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+
+        #Annualised Volatility
+        bt["ann_vol_basket"] = bt["basket_ret"].std() * np.sqrt(252)
+        bt["ann_vol_strategy"] = bt["strategy_ret"].std() * np.sqrt(252)
+
+        
         if "strategy_ret_ptt" in bt.columns:
             std_ptt = bt["strategy_ret_ptt"].std()
             bt["sharpe_strategy_ptt"] = (bt["strategy_ret_ptt"].mean() / std_ptt * np.sqrt(252)) if std_ptt > 0 else 0.0
+            bt["calmar_strategy_ptt"] = bt["cum_strategy_ptt"].iloc[-1] / abs(bt["cum_strategy_ptt"].min()) if bt["cum_strategy_ptt"].min() < 0 else np.inf
+            bt["ann_return_strategy_ptt"] = (bt["cum_strategy_ptt"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+            bt["ann_vol_strategy_ptt"] = bt["strategy_ret_ptt"].std() * np.sqrt(252)
 
         return bt
 
@@ -566,7 +585,7 @@ class RegimeDetector:
 
         bt = pd.DataFrame(index=signals.index)
         bt["basket_ret"] = simple_ret
-        bt["strategy_ret_skmeans"] = simple_ret * signals["regime_skmeans"]
+        bt["strategy_ret_skmeans"] = bt["basket_ret"] * signals["regime_skmeans"]
 
         # Cumulative returns via compounding simple returns
         bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()
@@ -577,6 +596,17 @@ class RegimeDetector:
         std_skmeans = bt["strategy_ret_skmeans"].std()
         bt["sharpe_basket"] = (bt["basket_ret"].mean() / std_basket * np.sqrt(252)) if std_basket > 0 else 0.0
         bt["sharpe_strategy_skmeans"] = (bt["strategy_ret_skmeans"].mean() / std_skmeans * np.sqrt(252)) if std_skmeans > 0 else 0.0
+
+        #Calmar ratios (using max drawdown from cumulative returns)
+        bt["calmar_strategy_skmeans"] = bt["cum_strategy_skmeans"].iloc[-1] / abs(bt["cum_strategy_skmeans"].min()) if bt["cum_strategy_skmeans"].min() < 0 else np.inf
+
+        #Annualised Return
+        bt["ann_return_basket"] = (bt["cum_basket"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+        bt["ann_return_strategy_skmeans"] = (bt["cum_strategy_skmeans"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+
+        #Annualised Volatility
+        bt["ann_vol_basket"] = bt["basket_ret"].std() * np.sqrt(252)
+        bt["ann_vol_strategy_skmeans"] = bt["strategy_ret_skmeans"].std() * np.sqrt(252)
 
         return bt
 

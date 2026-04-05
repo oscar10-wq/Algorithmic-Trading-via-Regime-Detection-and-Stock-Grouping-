@@ -98,6 +98,12 @@ In this project, we apply k-means clustering and PCA to solve the problem of mar
 We evaluate the quality of each detection method using a trading strategy that goes long when the label indicates a bullish regime and flat otherwise, comparing cumulative returns across methods and regions (America, Europe, Asia).
 
 % ─────────────────────────────────────────────────────────────
+\section{Introduction}
+Financial markets, especially the stock market, have complexities. Due to various factors, such as macroeconomic recession, debt crisis, and policy changes, the market will show different regimes, such as bull and bear markets. Changes in market conditions often lead to fluctuations in stock prices. In different market regimes, investors need to use different trading strategies to increase returns and reduce losses. Therefore, detecting market regimes accurately plays an important role in making investment decisions and controlling trading risks.
+
+K-means clustering and PCA are combined to identify market patterns in multidimensional financial time series. The trading strategy used to go long when the label shows bull and keep the position closed otherwise. Cumulative return, Annualized return, Annualized volatility and Sharpe ratio are used to measure the performance of trading strategies based on the results of market regime detection. The performance of the PCA k-means, the Hidden Markov Model with Gaussian Mixtures (GMMHMM), sliced-Wasserstein k-means clustering, and a simple peak-to-trough-based regime labelling method and long only were compared.
+
+% ─────────────────────────────────────────────────────────────
 \section{Data Processing and Feature Engineering}
 We track 9 major stock indices across 3 regions to develop our analysis.
 

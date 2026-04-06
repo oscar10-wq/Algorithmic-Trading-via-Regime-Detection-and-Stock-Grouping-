@@ -427,8 +427,8 @@ class RegimeDetector:
         mean_ret = pd.Series(raw_labels, index=self.features_raw.index).groupby(raw_labels).apply(
             lambda g: daily_ret.loc[g.index].mean()
         )
-        rank_map = {old: new for new, old in enumerate(mean_ret.sort_values().index)}
-        ordered = np.array([rank_map[l] for l in raw_labels])
+        self.rank_map = {old: new for new, old in enumerate(mean_ret.sort_values().index)}
+        ordered = np.array([self.rank_map[l] for l in raw_labels])
         
         print(ordered.shape)
 

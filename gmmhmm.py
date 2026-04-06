@@ -333,9 +333,22 @@ class HMMRegimeDetector:
         self.test_labels: Optional[pd.Series] = None
         self.train_state_probs: Optional[pd.DataFrame] = None
         self.test_state_probs: Optional[pd.DataFrame] = None
+        self.is_train_test_fit: bool = False
+        self.fit_mode: Optional[str] = None   # "full_sample" or "train_test"
 
     def fit(self) -> "HMMRegimeDetector":
-        """Run full pipeline: features -> scale -> PCA -> HMM -> profile."""
+        """
+        Full-sample fit for descriptive / in-sample regime analysis only.
+
+        Warning
+        -------
+        This method uses the full dataset for training and labelling.
+        It is NOT an out-of-sample evaluation and should not be used
+        as evidence of predictive performance.
+        """
+        self.is_train_test_fit = False
+        self.fit_mode = "full_sample"
+
         self.features_raw = build_features(
             self.close,
             return_periods=self.return_periods,
@@ -403,7 +416,6 @@ class HMMRegimeDetector:
         self.profiles = _profile_regimes(self.close, self.labels, self.features_raw)
         self._auto_name_regimes()
         return self
-
     def train_test_split(self, split_date: str):
         self.train_close = self.close.loc[self.close.index < split_date].copy()
         self.test_close = self.close.loc[self.close.index >= split_date].copy()
@@ -417,6 +429,8 @@ class HMMRegimeDetector:
         return self.train_close, self.test_close
 
     def fit_train_test(self, split_date: str) -> "HMMRegimeDetector":
+        self.is_train_test_fit = True
+        self.fit_mode = "train_test"
         self.train_test_split(split_date=split_date)
 
         self.train_features_raw = build_features(
@@ -566,18 +580,40 @@ class HMMRegimeDetector:
                 "Avg Corr": f"{p.avg_correlation:.2f}" if pd.notna(p.avg_correlation) else "nan",
             })
         return pd.DataFrame(rows)
-
-    def transition_matrix(self) -> pd.DataFrame:
-        """Return the fitted transition matrix."""
+    
+    def _reordered_transition_matrix(self) -> pd.DataFrame:
+        """
+        Return transition matrix reordered to match the relabelled regimes
+        (i.e. after applying self.rank_map).
+        """
         if self.hmm is None:
-            raise RuntimeError("Call .fit() first.")
+            raise RuntimeError("Call .fit() or .fit_train_test() first.")
+        if self.rank_map is None:
+            raise RuntimeError("rank_map is not available.")
 
-        tm = pd.DataFrame(
-            self.hmm.transmat_,
+        old_tm = np.asarray(self.hmm.transmat_)
+
+        # old_state -> new_state
+        old_to_new = self.rank_map
+
+        # build reverse map: new_state -> old_state
+        new_to_old = {new: old for old, new in old_to_new.items()}
+
+        order = [new_to_old[new] for new in range(self.n_regimes)]
+        reordered = old_tm[np.ix_(order, order)]
+
+        return pd.DataFrame(
+            reordered,
             index=[f"R{i}" for i in range(self.n_regimes)],
             columns=[f"R{i}" for i in range(self.n_regimes)],
         )
-        return tm
+
+    def transition_matrix(self) -> pd.DataFrame:
+        """
+        Return the fitted transition matrix in the SAME regime order as
+        self.labels / self.summary() / self.regime_names.
+        """
+        return self._reordered_transition_matrix()
 
     def generate_signals(
         self,
@@ -637,6 +673,13 @@ class HMMRegimeDetector:
         initial_capital: float = 100,
         signals: Optional[pd.DataFrame] = None,
     ) -> pd.DataFrame:
+        if self.fit_mode == "full_sample" and dataset == "all":
+            warnings.warn(
+                "You are backtesting on labels generated from a full-sample fit. "
+                "This is in-sample/descriptive only and is subject to look-ahead bias. "
+                "Use fit_train_test(...)+backtest(dataset='test') for out-of-sample evaluation.",
+                UserWarning,
+    )
         """Simple long-only basket backtest."""
         if dataset == "train":
             close_used = self.train_close
@@ -783,21 +826,40 @@ class HMMRegimeDetector:
         ax.axhline(0, color="black", lw=0.5)
 
         ax = axes[4]
-        if self.features_reduced is not None and self.features_reduced.shape[1] >= 2:
-            for rid in sorted(self.labels.unique()):
-                mask = self.labels.values == rid
-                ax.scatter(
-                    self.features_reduced[mask, 0],
-                    self.features_reduced[mask, 1],
-                    c=[colours[rid]], s=8, alpha=0.5, label=f"R{rid}",
-                )
-            ax.set_xlabel("PC1")
-            ax.set_ylabel("PC2")
-            ax.set_title("PCA — First Two Components")
-            ax.legend(fontsize=7)
-        else:
-            ax.text(0.5, 0.5, "PCA not available", ha="center", va="center")
 
+        if self.fit_mode == "train_test":
+            # In train/test mode, self.features_reduced contains only TRAIN features.
+            # So only plot PCA scatter for the training sample.
+            if self.features_reduced is not None and self.features_reduced.shape[1] >= 2 and self.train_labels is not None:
+                for rid in sorted(self.train_labels.unique()):
+                    mask = self.train_labels.values == rid
+                    ax.scatter(
+                        self.features_reduced[mask, 0],
+                        self.features_reduced[mask, 1],
+                        c=[colours[rid]], s=8, alpha=0.5, label=f"R{rid}",
+                    )
+                ax.set_xlabel("PC1")
+                ax.set_ylabel("PC2")
+                ax.set_title("PCA — First Two Components (Train Only)")
+                ax.legend(fontsize=7)
+            else:
+                ax.text(0.5, 0.5, "PCA not available", ha="center", va="center")
+        else:
+            # Full-sample fit: features_reduced and labels align
+            if self.features_reduced is not None and self.features_reduced.shape[1] >= 2 and self.labels is not None:
+                for rid in sorted(self.labels.unique()):
+                    mask = self.labels.values == rid
+                    ax.scatter(
+                        self.features_reduced[mask, 0],
+                        self.features_reduced[mask, 1],
+                        c=[colours[rid]], s=8, alpha=0.5, label=f"R{rid}",
+                    )
+                ax.set_xlabel("PC1")
+                ax.set_ylabel("PC2")
+                ax.set_title("PCA — First Two Components")
+                ax.legend(fontsize=7)
+            else:
+                ax.text(0.5, 0.5, "PCA not available", ha="center", va="center")
         ax = axes[5]
         bt = self.backtest()
         ax.plot(bt.index, bt["cum_basket"], label="Buy & Hold", color="grey", alpha=0.8)

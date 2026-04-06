@@ -1,0 +1,5 @@
+Regime,Name,Days,% of Sample,Ann. Return,Ann. Vol,Sharpe,Avg Corr
+0,Crisis,770,21.8%,-189.95%,22.21%,-8.55,0.87
+1,Low-vol Rally,1061,30.1%,13.58%,10.60%,1.28,0.77
+2,Low-vol Rally,1251,35.5%,69.49%,11.09%,6.27,0.86
+3,High-vol Rally,445,12.6%,137.38%,26.62%,5.16,0.92

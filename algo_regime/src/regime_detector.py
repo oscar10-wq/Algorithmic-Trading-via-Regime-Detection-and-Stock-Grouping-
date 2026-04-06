@@ -439,7 +439,44 @@ class RegimeDetector:
         self._auto_name_regimes()
 
         return self
-    
+
+    def predict_regimes(
+        self,
+        close_extended: pd.DataFrame,
+        start_date: str,
+        end_date: str,
+    ) -> pd.Series:
+        if self.scaler is None or self.kmeans is None or self.rank_map is None:
+            raise RuntimeError("Call .fit() first on the training set.")
+
+        features_full = build_features(
+            close_extended,
+            return_periods=self.return_periods,
+            vol_windows=self.vol_windows,
+        )
+        features = features_full.loc[start_date:end_date].copy()
+
+        X_scaled = self.scaler.transform(features)
+
+        if self.pca is not None:
+            X = self.pca.transform(X_scaled)
+        else:
+            X = X_scaled
+
+        raw_labels = self.kmeans.predict(X)
+        ordered = np.array([self.rank_map[l] for l in raw_labels])
+
+        return pd.Series(ordered, index=features.index, name="regime")
+
+    def peak_to_trough_labelling(self, drawdown_threshold: float = -0.1) -> pd.DataFrame:
+        daily_ret = np.log(self.close / self.close.shift(1)).mean(axis=1)
+        cumulative = (1 + daily_ret).cumprod()
+        peaks = cumulative.cummax()
+        drawdown = (cumulative - peaks) / peaks
+        self.regime_labels_ptt = pd.Series(1, index=self.features_raw.index)
+        self.regime_labels_ptt[drawdown <= drawdown_threshold] = 0
+        return self.regime_labels_ptt
+        
     def peak_to_trough_labelling(self, drawdown_threshold: float = -0.1) -> pd.DataFrame:
         # Label regimes using peak-to-trough drawdown logic to create accuracy metrics
         daily_ret = np.log(self.close / self.close.shift(1)).mean(axis=1)

@@ -368,6 +368,7 @@ class RegimeDetector:
         self.labels: Optional[pd.Series] = None
         self.profiles: Optional[List[RegimeProfile]] = None
         self.regime_names: Dict[int, str] = {}
+        self.rank_map: Optional[Dict[int, int]] = None
 
     # ── fit ──────────────────────────────────────────────────────────────
 

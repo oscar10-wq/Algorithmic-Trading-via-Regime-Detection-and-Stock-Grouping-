@@ -492,7 +492,7 @@ class HMMRegimeDetector:
 
         bt = pd.DataFrame(index=signals.index)
         bt["basket_ret"] = simple_ret
-        bt["strategy_ret"] = simple_ret * signals["weight"]
+        bt["strategy_ret"] = simple_ret * signals["weight"].shift(1).fillna(0)
 
         # Cumulative returns via compounding simple returns
         bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()

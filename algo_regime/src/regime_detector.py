@@ -514,6 +514,7 @@ class RegimeDetector:
         return signals, signals_skmeans
 
    # ── back-test helper ─────────────────────────────────────────────────
+
     def backtest(self, initial_capital=100, signals: Optional[pd.DataFrame] = None) -> pd.DataFrame:
         """
         Simple long-only back-test: basket return × regime weight.
@@ -531,11 +532,13 @@ class RegimeDetector:
         bt = pd.DataFrame(index=signals.index)
         bt["basket_ret"] = simple_ret
 
-        bt["strategy_ret"] = bt["basket_ret"] * signals["weight"]
+        bt["strategy_ret"] = bt["basket_ret"] * signals["weight"].shift(1)
 
 
         if "weight_ptt" in signals.columns:
-            bt["strategy_ret_ptt"] = bt["basket_ret"] * signals["weight_ptt"]
+            bt["strategy_ret_ptt"] = bt["basket_ret"] * signals["weight_ptt"].shift(1)
+
+        bt = bt.dropna(subset=["basket_ret", "strategy_ret"])
 
         # Cumulative returns via compounding simple returns
         bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()
@@ -585,7 +588,7 @@ class RegimeDetector:
 
         bt = pd.DataFrame(index=signals.index)
         bt["basket_ret"] = simple_ret
-        bt["strategy_ret_skmeans"] = bt["basket_ret"] * signals["regime_skmeans"]
+        bt["strategy_ret_skmeans"] = bt["basket_ret"] * signals["regime_skmeans"].shift(1)
 
         # Cumulative returns via compounding simple returns
         bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()

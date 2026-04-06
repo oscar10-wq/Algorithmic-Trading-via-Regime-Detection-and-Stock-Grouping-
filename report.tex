@@ -359,7 +359,7 @@ Figure~\ref{fig:regime_profiles} shows the detected regimes overlaid on an equal
 
 \subsection{Trading Strategy Comparison}
 To evaluate regime quality, we implement a long/flat strategy: go long in bullish regimes, hold cash otherwise. We benchmark PCA K-Means against GMMHMM, sliced-Wasserstein k-means, peak-to-trough labelling (20\% drawdown threshold), and a long-only baseline. All strategies start with \$100 over March 2006 -- January 2020.
-
+We shift the signal by one day to avoid look-ahead bias, and we do not apply transaction costs or slippage in this backtest.
 \begin{figure}[H]
     \centering
     \begin{subfigure}[b]{0.32\textwidth}
@@ -383,7 +383,7 @@ To evaluate regime quality, we implement a long/flat strategy: go long in bullis
     \label{fig:cumulative_returns}
 \end{figure}
 
-The PCA K-Means strategy significantly outperforms all alternatives across every region, as summarised in Table~\ref{tab:backtest_summary}.
+The PCA K-Means strategy underperforms consistently more complex models such as the HMM and sW K-Means, regime detection models as shown in Table~\ref{tab:backtest_summary}.
 
 \begin{table}[H]
 \centering
@@ -394,31 +394,30 @@ The PCA K-Means strategy significantly outperforms all alternatives across every
 \toprule
 \textbf{Region} & \textbf{Metric} & \textbf{PCA $K$-Means} & \textbf{HMM} & \textbf{sW$K$-Means} & \textbf{Peak-to-Trough} & \textbf{Long Only} \\
 \midrule
-\multirow{4}{*}{American}
- & Cumulative Return (\%)    & 34,808.39 & 915.48  & 483.31  & 337.18  & 293.05  \\
- & Annualised Return (\%)    & 53        & 16      & 12      & 9       & 8       \\
- & Annualised Volatility (\%)& 10        & 6       & 15      & 10      & 19      \\
- & Sharpe Ratio              & 4.37      & 2.74    & 0.85    & 0.95    & 0.51    \\
+\multirow{5}{*}{American}
+ & Cumulative Return (\%)     & 164.41 & 359.87 & 487.03 & 192.45 & 291.57 \\
+ & Annualised Return (\%)     & 4      & 10     & 12     & 5      & 8      \\
+ & Annualised Volatility (\%) & 10     & 7      & 15     & 10     & 19     \\
+ & Sharpe Ratio               & 0.40   & 1.47   & 0.85   & 0.53   & 0.51   \\
 \midrule
-\multirow{4}{*}{European}
- & Cumulative Return (\%)    & 39,532.73 & 247.17  & 401.41  & 155.08  & 149.26  \\
- & Annualised Return (\%)    & 53        & 7       & 10      & 3       & 3       \\
- & Annualised Volatility (\%)& 11        & 7       & 15      & 6       & 20      \\
- & Sharpe Ratio              & 3.91      & 0.94    & 0.72    & 0.57    & 0.24    \\
+\multirow{5}{*}{European}
+ & Cumulative Return (\%)     & 116.90 & 148.82 & 334.00 & 83.74  & 149.99 \\
+ & Annualised Return (\%)     & 1      & 3      & 9      & $-1$   & 3      \\
+ & Annualised Volatility (\%) & 12     & 8      & 16     & 6      & 20     \\
+ & Sharpe Ratio               & 0.15   & 0.41   & 0.63   & $-0.18$& 0.25   \\
 \midrule
-\multirow{4}{*}{Asian}
- & Cumulative Return (\%)    & 23,225.90 & 810.79  & 687.00  & 155.36  & 173.54  \\
- & Annualised Return (\%)    & 47        & 15      & 15      & 3       & 4       \\
- & Annualised Volatility (\%)& 10        & 8       & 14      & 6       & 19      \\
- & Sharpe Ratio              & 3.76      & 1.90    & 1.04    & 0.54    & 0.30    \\
+\multirow{5}{*}{Asian}
+ & Cumulative Return (\%)     & 234.02 & 347.23 & 688.40 & 111.41 & 170.85 \\
+ & Annualised Return (\%)     & 6      & 9      & 15     & 1      & 4      \\
+ & Annualised Volatility (\%) & 11     & 9      & 14     & 6      & 19     \\
+ & Sharpe Ratio               & 0.61   & 1.08   & 1.07   & 0.16   & 0.30   \\
 \bottomrule
 \end{tabular}%
 }
 \end{table}
-Looking at the performance metrics, the PCA K-Means strategy achieves annualised returns of 47--53\% with Sharpe ratios above 3.7 across all regions, while alternatives lag significantly behind. The long-only benchmark delivers much lower returns and Sharpe ratios. 
-We can therefore see that PCA K-means capture market regimes in a highly granuar way, as opposed to other methods which are either too noisy (sW k-means) or too coarse (peak-to-trough). The HMM performs decently but still falls short of the PCA K-Means approach, likely due to its parametric assumptions and sensitivity to regime duration.
-However, while we present performance metrics for trading strategies, those results have to be taken as a descriptive accuracy rather than a predictive accuracy, as for all regime detection methods, we have high look-ahead bias when labelling regimes. 
-This is because we are using the entire dataset to detect regimes, and then backtesting a strategy on the same dataset. Therefore, while the PCA K-Means method shows superior performance in this backtest, further work would be needed to evaluate its predictive power in an out-of-sample context.
+Looking at the performance metrics, the sW$K$-Means strategy achieves the highest cumulative returns across all three regions (487\%, 334\%, and 688\% for America, Europe, and Asia respectively), while the HMM delivers the best risk-adjusted performance, with Sharpe ratios of 1.47, 0.41, and 1.08. PCA $K$-Means, despite its low volatility, produces the weakest Sharpe ratios among regime-based strategies (0.40, 0.15, and 0.61), and in the American and European regions it even underperforms the long-only benchmark in terms of cumulative return.
+
+We can therefore see that the HMM captures market regimes in a way that balances return generation with risk control, as reflected by its consistently high Sharpe ratios and low volatilities (7--9\%). The sW$K$-Means method generates the largest returns but at the cost of higher volatility (14--16\%), suggesting it captures genuine regime shifts but also introduces noisier transitions. PCA $K$-Means, while producing low volatility, appears to generate overly conservative signals that fail to capitalise on favourable regimes, and the peak-to-trough method performs poorly across all regions, with a negative Sharpe ratio in Europe.
 
 \paragraph{Method-level differences.}
 From a modelling perspective, these performance differences are consistent with the mechanisms of the methods. PCA K-Means clusters daily observations in a denoised, PCA-reduced feature space built from returns, volatility, correlations, momentum z-scores, and RSI, and the resulting regimes are then ordered by mean return. This makes the method particularly effective at separating market states that are directly relevant for trading. 
@@ -426,9 +425,9 @@ By contrast, GMM-HMM uses the same feature set but imposes a latent-state struct
 Peak-to-trough labelling is more interpretable but relies only on drawdown information, while the long-only strategy provides a passive benchmark with no regime adaptation.
 
 \paragraph{Regional differences.}
-The regional results in Table 3 also highlight meaningful differences across markets. In the American indices, the advantage of PCA K-Means is likely supported by the strong co-movement among the S\&P 500, Dow Jones, and Nasdaq, which allows PCA to extract common market structure effectively; HMM also performs relatively well here, suggesting clearer regime persistence. 
-In the European indices, PCA K-Means achieves the largest relative advantage over the benchmarks, which is consistent with the more pronounced structural stress episodes in the sample, particularly the 2011 European debt crisis. 
-In the Asian indices, although PCA K-Means remains the strongest method, the gap relative to HMM and sWK-Means is narrower. This is consistent with the higher retained PCA dimensionality reported earlier, suggesting a more heterogeneous market structure across the KOSPI, Nikkei 225, and Hang Seng, where alternative methods can still capture part of the regime variation.
+The relative ranking of methods is broadly consistent across regions, but the magnitude of outperformance varies. In the American market, the HMM stands out with a Sharpe ratio of 1.47---the highest across all region-method pairs---while sW$K$-Means delivers the largest cumulative return at 487\%. PCA $K$-Means underperforms the long-only benchmark (164\% vs.\ 292\%), suggesting that its regime signals are poorly calibrated for U.S.\ equities. In Europe, all strategies struggle with lower absolute returns, consistent with the more subdued performance of European indices over the sample period. The sW$K$-Means method nonetheless achieves a cumulative return of 334\% with a Sharpe ratio of 0.63, while the peak-to-trough approach is the only strategy to produce a negative annualised return ($-1$\%) and Sharpe ratio ($-0.18$). The Asian region shows the strongest overall performance for sW$K$-Means (688\% cumulative return) and a near-tie in Sharpe ratios between HMM (1.08) and sW$K$-Means (1.07), indicating that both temporal and distributional regime detection approaches are effective in capturing the more volatile dynamics of Asian markets.
+
+
 
 \subsection{Hyperparameter tuning}
 

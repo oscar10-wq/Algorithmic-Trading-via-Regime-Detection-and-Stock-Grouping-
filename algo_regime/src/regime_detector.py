@@ -140,6 +140,55 @@ def build_features(
     return features
 
 
+def split_by_date(
+    close: pd.DataFrame,
+    train_start: str,
+    train_end: str,
+    val_start: str,
+    val_end: str,
+    test_start: str,
+    test_end: str,
+):
+    train_close = close.loc[train_start:train_end].copy()
+    val_close = close.loc[val_start:val_end].copy()
+    test_close = close.loc[test_start:test_end].copy()
+    return train_close, val_close, test_close
+
+
+def get_extended_window(
+    close: pd.DataFrame,
+    start_date: str,
+    end_date: str,
+    warmup_bars: int,
+):
+    idx = close.index
+    start_ts = pd.Timestamp(start_date)
+    end_ts = pd.Timestamp(end_date)
+
+    start_loc = idx.get_loc(start_ts)
+    ext_start_loc = max(0, start_loc - warmup_bars)
+    ext_start = idx[ext_start_loc]
+
+    return close.loc[ext_start:end_ts].copy()
+
+
+def evaluate_backtest(bt: pd.DataFrame, initial_capital: float = 100.0) -> Dict[str, float]:
+    ret = bt["strategy_ret"].dropna()
+    cum = bt["cum_strategy"].dropna()
+
+    total_return = cum.iloc[-1] / initial_capital - 1
+    ann_return = (cum.iloc[-1] / initial_capital) ** (252 / len(cum)) - 1
+    ann_vol = ret.std() * np.sqrt(252)
+    sharpe = ret.mean() / ret.std() * np.sqrt(252) if ret.std() > 0 else np.nan
+
+    return {
+        "total_return": total_return,
+        "ann_return": ann_return,
+        "ann_vol": ann_vol,
+        "sharpe": sharpe,
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  2.  OPTIMAL-K SELECTION
 # ═══════════════════════════════════════════════════════════════════════════

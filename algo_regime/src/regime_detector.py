@@ -618,11 +618,13 @@ class RegimeDetector:
         bt = pd.DataFrame(index=signals.index)
         bt["basket_ret"] = simple_ret
 
-        bt["strategy_ret"] = bt["basket_ret"] * signals["weight"]
+        bt["strategy_ret"] = bt["basket_ret"] * signals["weight"].shift(1)
 
 
         if "weight_ptt" in signals.columns:
-            bt["strategy_ret_ptt"] = bt["basket_ret"] * signals["weight_ptt"]
+            bt["strategy_ret_ptt"] = bt["basket_ret"] * signals["weight_ptt"].shift(1)
+
+        bt = bt.dropna(subset=["basket_ret", "strategy_ret"])
 
         # Cumulative returns via compounding simple returns
         bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()
@@ -958,7 +960,7 @@ if __name__ == "__main__":
     import matplotlib
     matplotlib.use("Agg")
 
-    from data_loader import get_close_prices
+    from data.src.data_loader import get_close_prices
 
     print("=" * 60)
     print(" Regime Detection — European Indices")
@@ -975,7 +977,7 @@ if __name__ == "__main__":
     print(rd.summary().to_string(index=False))
 
     print("\n── Signals (tail) ──")
-    signals = rd.generate_signals()
+    signals, signals_skmeans = rd.generate_signals()
     print(signals.tail(10))
 
     print("\n── Back-test (tail) ──")

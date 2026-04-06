@@ -135,7 +135,7 @@ def build_features(
         _rsi(close, rsi_period),
     ]
     features = pd.concat(parts, axis=1).dropna()
-    print(features.columns)
+    #print(features.columns)
     logger.info("Feature matrix: %d rows × %d cols", *features.shape)
     return features
 
@@ -435,7 +435,7 @@ class RegimeDetector:
         self.rank_map = {old: new for new, old in enumerate(mean_ret.sort_values().index)}
         ordered = np.array([self.rank_map[l] for l in raw_labels])
         
-        print(ordered.shape)
+        #print(ordered.shape)
 
         self.labels = pd.Series(ordered, index=self.features_raw.index, name="regime")
 
@@ -535,7 +535,7 @@ class RegimeDetector:
         import algo_regime.src.metrics as mt
 
         N = self.close.shape[0]
-        print(f"shape of close: {self.close.shape}")
+       #print(f"shape of close: {self.close.shape}")
         _, _, labels_skmeans = ws.max_mccd_unifortho_sim(N_S, self.close, self.n_regimes, L = L,  epsilon = 1e-6, h1 = h1, h2 = h2, metric = "CVaR")
         transformed_labels = mt.convert_prediction(N, labels_skmeans, h1, h2)
         self.labels_skmeans = pd.Series(transformed_labels.ravel(), index=self.close.index, name="regime_sWkmeans")
@@ -888,10 +888,12 @@ class RegimeDetector:
             bt = self.backtest(initial_capital=100)
 
         fig, ax = plt.subplots(figsize=figsize)
-        bt = self.backtest(initial_capital=100)
         ax.plot(bt.index, bt["cum_basket"], label="Buy & Hold", color="grey", alpha=0.8)
         ax.plot(bt.index, bt["cum_strategy"], label="Regime Strategy", color="teal", lw=1.5)
-        ax.plot(bt.index, bt["cum_strategy_ptt"], label="Regime Strategy (PTT)", color="coral", lw=1.5)
+
+        if "cum_strategy_ptt" in bt.columns:
+            ax.plot(bt.index, bt["cum_strategy_ptt"], label="Regime Strategy (PTT)", color="coral", lw=1.5)
+
         ax.set_title("Log-Cumulative Performance")
         ax.set_xlabel("Date")
         ax.set_yscale("log")
@@ -1051,7 +1053,7 @@ if __name__ == "__main__":
     rd = RegimeDetector(close, use_pca=True, pca_variance=0.95)
     rd.fit_train_test(split_date="2020-01-01")
 
-    print("\n── Regime Summary ──")
+    print("\n── Regime statisical description ──")
     print(rd.summary().to_string(index=False))
 
     print("\n── Signals (tail) ──")

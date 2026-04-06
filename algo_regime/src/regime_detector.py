@@ -28,7 +28,12 @@ Usage
 
 from __future__ import annotations
 
+from ast import For
+from fileinput import close
 import logging
+from queue import Full
+from socket import close
+from unittest import signals
 import warnings
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -55,17 +60,32 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _log_returns(close: pd.DataFrame, periods: List[int]) -> pd.DataFrame:
-    """Multi-horizon log returns."""
     frames = {}
+    close = close.astype(float)
+
     for p in periods:
         for col in close.columns:
-            frames[f"{col}_ret_{p}d"] = np.log(close[col] / close[col].shift(p))
+            ratio = close[col] / close[col].shift(p)
+            ratio = ratio.where(ratio > 0)   # keep only valid positive ratios
+            frames[f"{col}_ret_{p}d"] = np.log(ratio)
+
     return pd.DataFrame(frames, index=close.index)
 
+def _safe_daily_log_returns(close: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute daily log returns safely, leaving invalid entries as NaN.
+    """
+    close = close.astype(float)
+    ratio = close / close.shift(1)
+    ratio = ratio.where(ratio > 0)
+    return np.log(ratio)
 
 def _rolling_volatility(close: pd.DataFrame, windows: List[int]) -> pd.DataFrame:
     """Annualised rolling volatility of daily log returns."""
-    daily = np.log(close / close.shift(1))
+    close = close.astype(float)
+    ratio = close / close.shift(1)
+    ratio = ratio.where(ratio > 0)
+    daily = np.log(ratio)
     frames = {}
     for w in windows:
         for col in daily.columns:
@@ -75,7 +95,10 @@ def _rolling_volatility(close: pd.DataFrame, windows: List[int]) -> pd.DataFrame
 
 def _rolling_correlation(close: pd.DataFrame, window: int = 63) -> pd.DataFrame:
     """Rolling pairwise correlations (upper triangle only)."""
-    daily = np.log(close / close.shift(1))
+    close = close.astype(float)
+    ratio = close / close.shift(1)
+    ratio = ratio.where(ratio > 0)
+    daily = np.log(ratio)
     cols = list(daily.columns)
     frames = {}
     for i in range(len(cols)):
@@ -154,7 +177,6 @@ def split_by_date(
     test_close = close.loc[test_start:test_end].copy()
     return train_close, val_close, test_close
 
-
 def get_extended_window(
     close: pd.DataFrame,
     start_date: str,
@@ -165,12 +187,15 @@ def get_extended_window(
     start_ts = pd.Timestamp(start_date)
     end_ts = pd.Timestamp(end_date)
 
-    start_loc = idx.get_loc(start_ts)
+    # first available trading day on or after start_date
+    start_loc = idx.searchsorted(start_ts)
+    if start_loc >= len(idx):
+        raise ValueError("start_date is after the last available observation.")
+
     ext_start_loc = max(0, start_loc - warmup_bars)
     ext_start = idx[ext_start_loc]
 
     return close.loc[ext_start:end_ts].copy()
-
 
 def evaluate_backtest(bt: pd.DataFrame, initial_capital: float = 100.0) -> Dict[str, float]:
     ret = bt["strategy_ret"].dropna()
@@ -285,7 +310,7 @@ def _profile_regimes(
     features: pd.DataFrame,
 ) -> List[RegimeProfile]:
     """Compute summary statistics for each regime cluster."""
-    daily_ret = np.log(close / close.shift(1)).mean(axis=1)  # equal-weight basket
+    daily_ret = _safe_daily_log_returns(close).mean(axis=1)  # equal-weight basket
     daily_ret = daily_ret.reindex(labels.index)
 
     corr_cols = [c for c in features.columns if c.startswith("corr_")]
@@ -374,11 +399,24 @@ class RegimeDetector:
         self.test_index: Optional[pd.Index] = None
         self.train_labels: Optional[pd.Series] = None
         self.test_labels: Optional[pd.Series] = None
+        self.train_index_skmeans: Optional[pd.Index] = None
+        self.test_index_skmeans: Optional[pd.Index] = None
+        self.train_labels_skmeans: Optional[pd.Series] = None
+        self.test_labels_skmeans: Optional[pd.Series] = None
+        self.theta_skmeans = None
+        self.centroids_skmeans = None
+        self.rank_map_skmeans = None
 
     # ── fit ──────────────────────────────────────────────────────────────
 
     def fit(self) -> "RegimeDetector":
-        """Run full pipeline: features → scale → PCA → K-select → cluster → profile."""
+        """
+        Run full pipeline: features → scale → PCA → K-select → cluster → profile.
+        
+        Full-sample fit for descriptive analysis only.
+        For bias-reduced out-of-sample evaluation, use fit_train_test().
+   
+        """
         # 1. features
         self.features_raw = build_features(
             self.close,
@@ -427,7 +465,7 @@ class RegimeDetector:
         raw_labels = self.kmeans.fit_predict(X)
 
         # 6. order regimes by mean return (regime 0 = worst, regime K-1 = best)
-        daily_ret = np.log(self.close / self.close.shift(1)).mean(axis=1)
+        daily_ret = _safe_daily_log_returns(self.close).mean(axis=1)
         daily_ret = daily_ret.reindex(self.features_raw.index)
         mean_ret = pd.Series(raw_labels, index=self.features_raw.index).groupby(raw_labels).apply(
             lambda g: daily_ret.loc[g.index].mean()
@@ -445,7 +483,7 @@ class RegimeDetector:
 
         return self
     def peak_to_trough_labelling(self, drawdown_threshold: float = -0.1) -> pd.DataFrame:
-        daily_ret = np.log(self.close / self.close.shift(1)).mean(axis=1)
+        daily_ret = _safe_daily_log_returns(self.close).mean(axis=1)
         cumulative = (1 + daily_ret).cumprod()
         peaks = cumulative.cummax()
         drawdown = (cumulative - peaks) / peaks
@@ -507,7 +545,7 @@ class RegimeDetector:
         train_raw_labels = self.kmeans.fit_predict(X_train)
         test_raw_labels = self.kmeans.predict(X_test)
 
-        daily_ret = np.log(self.close / self.close.shift(1)).mean(axis=1)
+        daily_ret = _safe_daily_log_returns(self.close).mean(axis=1)
         daily_ret_train = daily_ret.reindex(train_features.index)
 
         mean_ret_train = pd.Series(train_raw_labels, index=train_features.index).groupby(train_raw_labels).apply(
@@ -527,6 +565,10 @@ class RegimeDetector:
         self._auto_name_regimes()
 
         return self
+    
+
+    
+
 
     
     def detect_regime_skmeans(self,N_S = 5, L = 100, h1 = 50, h2 = 10, epsilon = 1e-6) -> pd.Series:
@@ -542,7 +584,99 @@ class RegimeDetector:
         print(self.labels_skmeans.shape)
         return self.labels_skmeans
     # ── naming ───────────────────────────────────────────────────────────
+    def detect_regime_skmeans_train_test(
+        self,
+        split_date: str,
+        N_S: int = 5,
+        L: int = 100,
+        h1: int = 50,
+        h2: int = 10,
+        epsilon: float = 1e-6,
+        metric: str = "CVaR",
+    ) -> pd.Series:
+        """
+        Train sWkmeans on the training sample only, then assign test windows
+        to the fitted training centroids using the fixed training projections.
 
+        Parameters
+        ----------
+        split_date : str
+            Chronological train/test split date.
+        N_S : int
+            Number of repeated clustering runs on the training set.
+        L : int
+            Number of projection vectors.
+        h1 : int
+            Lifting window length.
+        h2 : int
+            Lifting stride.
+        epsilon : float
+            Convergence tolerance.
+        metric : str
+            Label ordering helper used inside sWkmeans, e.g. "CVaR".
+
+        Returns
+        -------
+        pd.Series
+            Combined train+test sWkmeans labels indexed by lifted-window dates.
+        """
+        import algo_regime.src.sWkmean as ws
+
+        split_ts = pd.Timestamp(split_date)
+
+        train_close = self.close.loc[self.close.index < split_ts].copy()
+        if train_close.empty:
+            raise ValueError("Training sample is empty. Check split_date.")
+
+        # extend test window backwards so lifting on test can use pre-split history
+        test_close_ext = get_extended_window(
+            close=self.close,
+            start_date=split_date,
+            end_date=self.close.index.max().strftime("%Y-%m-%d"),
+            warmup_bars=h1,
+        )
+        if test_close_ext.empty:
+            raise ValueError("Extended test sample is empty. Check split_date.")
+
+        result = ws.fit_predict_swkmeans_train_test(
+            S_train=train_close.values,
+            S_test_with_warmup=test_close_ext.values,
+            train_price_index=train_close.index,
+            test_price_index_with_warmup=test_close_ext.index,
+            split_date=split_date,
+            K=self.n_regimes,
+            L=L,
+            epsilon=epsilon,
+            h1=h1,
+            h2=h2,
+            N_S=N_S,
+            metric=metric,
+            random_state=self.random_state,
+        )
+
+        # save useful internals
+        self.train_index_skmeans = pd.Index(result["train_index"])
+        self.test_index_skmeans = pd.Index(result["test_index"])
+        self.theta_skmeans = result["theta"]
+        self.centroids_skmeans = result["centroids"]
+        self.rank_map_skmeans = result["rank_map"]
+
+        self.train_labels_skmeans = pd.Series(
+            result["labels_train"],
+            index=self.train_index_skmeans,
+            name="regime_skmeans",
+        )
+        self.test_labels_skmeans = pd.Series(
+            result["labels_test"],
+            index=self.test_index_skmeans,
+            name="regime_skmeans",
+        )
+
+        self.labels_skmeans = pd.concat(
+            [self.train_labels_skmeans, self.test_labels_skmeans]
+        ).sort_index()
+
+        return self.labels_skmeans
     def _auto_name_regimes(self):
         """Give regimes human-readable names based on return/vol profile."""
         if not self.profiles:
@@ -588,33 +722,32 @@ class RegimeDetector:
         self,
         bull_regimes: Optional[List[int]] = None,
         bear_regimes: Optional[List[int]] = None,
-    ) -> pd.DataFrame:
+    ):
         """
-        Produce a daily signal DataFrame based on regime membership.
+        Produce signal DataFrames for the main KMeans model and, if available,
+        for sWkmeans.
 
-        Default logic (if bull/bear not specified):
-            • Top-return regime(s)   → weight = 1.0  (fully invested)
-            • Middle regime(s)       → weight = 0.5  (half position)
-            • Bottom-return regime   → weight = 0.0  (cash / short)
-
-        Returns a DataFrame with columns:
-            regime, regime_name, weight
+        Returns
+        -------
+        signals : pd.DataFrame
+            Columns: regime, regime_ptt, regime_name, weight, weight_ptt
+        signals_skmeans : pd.DataFrame or None
+            Columns: regime_skmeans, weight_skmeans
         """
         if self.labels is None:
-            raise RuntimeError("Call .fit() first.")
+            raise RuntimeError("Call .fit() or .fit_train_test() first.")
 
         n = self.n_regimes
 
         if bull_regimes is None and bear_regimes is None:
-            # auto: ordered by return (regime 0 = worst)
             weight_map = {}
             for rid in range(n):
                 if rid == n - 1:
-                    weight_map[rid] = 1.0      # best regime  → full long
+                    weight_map[rid] = 1.0
                 elif rid == 0:
-                    weight_map[rid] = 0.0      # worst regime → cash
+                    weight_map[rid] = 0.0
                 else:
-                    weight_map[rid] = 0.5      # middle       → half
+                    weight_map[rid] = 0.5
         else:
             bull_regimes = bull_regimes or []
             bear_regimes = bear_regimes or []
@@ -627,19 +760,27 @@ class RegimeDetector:
                 else:
                     weight_map[rid] = 0.5
 
+        # main PCA+KMeans signals
         signals = pd.DataFrame(index=self.labels.index)
         signals["regime"] = self.labels
-        signals["regime_ptt"] = self.regime_labels_ptt 
+        signals["regime_ptt"] = (
+            self.regime_labels_ptt.reindex(signals.index)
+            if self.regime_labels_ptt is not None else np.nan
+        )
         signals["regime_name"] = self.labels.map(self.regime_names)
         signals["weight"] = self.labels.map(weight_map)
-        signals["weight_ptt"] = self.regime_labels_ptt.map(weight_map) if self.regime_labels_ptt is not None else np.nan
+        signals["weight_ptt"] = (
+            signals["regime_ptt"].map(weight_map)
+            if self.regime_labels_ptt is not None else np.nan
+        )
 
+        # sWkmeans signals
+        signals_skmeans = None
         if self.labels_skmeans is not None:
-            signals_skmeans = pd.DataFrame(index=self.close.index)
-            signals_skmeans["regime_skmeans"] = self.labels_skmeans.map(weight_map)
-            #signals_skmeans = signals_skmeans.reindex(signals.index)
-            signals_skmeans = signals_skmeans.loc[signals_skmeans.index.isin(signals.index)]
-        signals_skmeans = signals_skmeans if self.labels_skmeans is not None else None
+            signals_skmeans = pd.DataFrame(index=self.labels_skmeans.index)
+            signals_skmeans["regime_skmeans"] = self.labels_skmeans
+            signals_skmeans["weight_skmeans"] = self.labels_skmeans.map(weight_map)
+
         return signals, signals_skmeans
 
    # ── back-test helper ─────────────────────────────────────────────────
@@ -741,42 +882,77 @@ class RegimeDetector:
 
     def backtest_skmeans(self, initial_capital=100, signals: Optional[pd.DataFrame] = None) -> pd.DataFrame:
         """
-        Back-test for sWkmeans regime detection.
+        Back-test for sWkmeans regime detection on the available sWkmeans label index.
         """
         if signals is None:
             _, signals = self.generate_signals()
 
-        # Use simple (arithmetic) returns so weighting is valid
+        if signals is None or signals.empty:
+            raise RuntimeError("No sWkmeans signals available. Call detect_regime_skmeans_train_test() first.")
+
         simple_ret = (self.close / self.close.shift(1) - 1).mean(axis=1)
         simple_ret = simple_ret.reindex(signals.index)
 
         bt = pd.DataFrame(index=signals.index)
         bt["basket_ret"] = simple_ret
-        bt["strategy_ret_skmeans"] = bt["basket_ret"] * signals["regime_skmeans"]
+        bt["strategy_ret_skmeans"] = bt["basket_ret"] * signals["weight_skmeans"].shift(1)
 
-        # Cumulative returns via compounding simple returns
+        bt = bt.dropna(subset=["basket_ret", "strategy_ret_skmeans"])
+
         bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()
         bt["cum_strategy_skmeans"] = initial_capital * (1 + bt["strategy_ret_skmeans"]).cumprod()
 
-        # Sharpe ratios
         std_basket = bt["basket_ret"].std()
         std_skmeans = bt["strategy_ret_skmeans"].std()
+
         bt["sharpe_basket"] = (bt["basket_ret"].mean() / std_basket * np.sqrt(252)) if std_basket > 0 else 0.0
         bt["sharpe_strategy_skmeans"] = (bt["strategy_ret_skmeans"].mean() / std_skmeans * np.sqrt(252)) if std_skmeans > 0 else 0.0
 
-        #Calmar ratios (using max drawdown from cumulative returns)
-        bt["calmar_strategy_skmeans"] = bt["cum_strategy_skmeans"].iloc[-1] / abs(bt["cum_strategy_skmeans"].min()) if bt["cum_strategy_skmeans"].min() < 0 else np.inf
-
-        #Annualised Return
         bt["ann_return_basket"] = (bt["cum_basket"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
         bt["ann_return_strategy_skmeans"] = (bt["cum_strategy_skmeans"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
 
-        #Annualised Volatility
         bt["ann_vol_basket"] = bt["basket_ret"].std() * np.sqrt(252)
         bt["ann_vol_strategy_skmeans"] = bt["strategy_ret_skmeans"].std() * np.sqrt(252)
 
         return bt
+    def backtest_skmeans_test_only(self, initial_capital=100) -> pd.DataFrame:
+        """
+        Back-test sWkmeans on the test sample only.
+        """
+        if self.test_index_skmeans is None:
+            raise RuntimeError("Call detect_regime_skmeans_train_test() first.")
 
+        _, signals_skmeans = self.generate_signals()
+        if signals_skmeans is None:
+            raise RuntimeError("No sWkmeans signals available.")
+
+        signals_skmeans = signals_skmeans.loc[self.test_index_skmeans].copy()
+
+        simple_ret = (self.close / self.close.shift(1) - 1).mean(axis=1)
+        simple_ret = simple_ret.reindex(signals_skmeans.index)
+
+        bt = pd.DataFrame(index=signals_skmeans.index)
+        bt["basket_ret"] = simple_ret
+        bt["strategy_ret_skmeans"] = bt["basket_ret"] * signals_skmeans["weight_skmeans"].shift(1)
+
+        bt = bt.dropna(subset=["basket_ret", "strategy_ret_skmeans"])
+
+        bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()
+        bt["cum_strategy_skmeans"] = initial_capital * (1 + bt["strategy_ret_skmeans"]).cumprod()
+
+        std_basket = bt["basket_ret"].std()
+        std_skmeans = bt["strategy_ret_skmeans"].std()
+
+        bt["sharpe_basket"] = (bt["basket_ret"].mean() / std_basket * np.sqrt(252)) if std_basket > 0 else 0.0
+        bt["sharpe_strategy_skmeans"] = (bt["strategy_ret_skmeans"].mean() / std_skmeans * np.sqrt(252)) if std_skmeans > 0 else 0.0
+
+        bt["ann_return_basket"] = (bt["cum_basket"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+        bt["ann_return_strategy_skmeans"] = (bt["cum_strategy_skmeans"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+
+        bt["ann_vol_basket"] = bt["basket_ret"].std() * np.sqrt(252)
+        bt["ann_vol_strategy_skmeans"] = bt["strategy_ret_skmeans"].std() * np.sqrt(252)
+
+        return bt
     # ── plotting ─────────────────────────────────────────────────────────
 
     def plot_k_selection(self):
@@ -1009,7 +1185,7 @@ class RegimeDetector:
 
         # ── (2,1) Cumulative back-test ───────────────────────────────
         ax = axes[5]
-        bt = self.backtest()
+        bt = self.backtest_test_only() if self.test_index is not None else self.backtest()
         ax.plot(bt.index, bt["cum_basket"], label="Buy & Hold", color="grey", alpha=0.8)
         ax.plot(bt.index, bt["cum_strategy"], label="Regime Strategy", color="teal", lw=1.5)
         ax.set_title("Log-Cumulative Performance")
@@ -1064,12 +1240,8 @@ if __name__ == "__main__":
     bt = rd.backtest_test_only()
     print(bt.tail(10))
 
-<<<<<<< HEAD
-    fig = rd.plot_regimes()
-    fig.savefig("regime_report.png", dpi=150, bbox_inches="tight")
-    print("\nSaved regime_report.png")
-=======
+
     #fig = rd.plot_regimes()
     #fig.savefig("regime_report.png", dpi=150, bbox_inches="tight")
     #print("\nSaved regime_report.png")
->>>>>>> cc90587 (Add signal lag and train test split for regime backtest)
+ 

@@ -370,6 +370,11 @@ class RegimeDetector:
         self.regime_names: Dict[int, str] = {}
         self.rank_map: Optional[Dict[int, int]] = None
 
+        self.train_index: Optional[pd.Index] = None
+        self.test_index: Optional[pd.Index] = None
+        self.train_labels: Optional[pd.Series] = None
+        self.test_labels: Optional[pd.Series] = None
+
     # ── fit ──────────────────────────────────────────────────────────────
 
     def fit(self) -> "RegimeDetector":
@@ -439,53 +444,90 @@ class RegimeDetector:
         self._auto_name_regimes()
 
         return self
+    def peak_to_trough_labelling(self, drawdown_threshold: float = -0.1) -> pd.DataFrame:
+        daily_ret = np.log(self.close / self.close.shift(1)).mean(axis=1)
+        cumulative = (1 + daily_ret).cumprod()
+        peaks = cumulative.cummax()
+        drawdown = (cumulative - peaks) / peaks
+        self.regime_labels_ptt = pd.Series(1, index=self.features_raw.index)
+        self.regime_labels_ptt[drawdown <= drawdown_threshold] = 0
+        return self.regime_labels_ptt
 
-    def predict_regimes(
-        self,
-        close_extended: pd.DataFrame,
-        start_date: str,
-        end_date: str,
-    ) -> pd.Series:
-        if self.scaler is None or self.kmeans is None or self.rank_map is None:
-            raise RuntimeError("Call .fit() first on the training set.")
-
-        features_full = build_features(
-            close_extended,
+    def fit_train_test(self, split_date: str) -> "RegimeDetector":
+        """
+        Fit scaler / PCA / KMeans on the training sample only, then
+        predict regimes for the test sample using the fitted objects.
+        """
+        self.features_raw = build_features(
+            self.close,
             return_periods=self.return_periods,
             vol_windows=self.vol_windows,
         )
-        features = features_full.loc[start_date:end_date].copy()
 
-        X_scaled = self.scaler.transform(features)
+        train_features = self.features_raw.loc[self.features_raw.index < split_date].copy()
+        test_features = self.features_raw.loc[self.features_raw.index >= split_date].copy()
 
-        if self.pca is not None:
-            X = self.pca.transform(X_scaled)
+        if train_features.empty or test_features.empty:
+            raise ValueError("Train/test split produced an empty dataset. Check split_date.")
+
+        self.train_index = train_features.index
+        self.test_index = test_features.index
+
+        self.scaler = StandardScaler()
+        X_train_scaled = self.scaler.fit_transform(train_features)
+        X_test_scaled = self.scaler.transform(test_features)
+
+        if self.use_pca:
+            self.pca = PCA(n_components=self.pca_variance, random_state=self.random_state)
+            X_train = self.pca.fit_transform(X_train_scaled)
+            X_test = self.pca.transform(X_test_scaled)
+            logger.info(
+                "Train/Test PCA: %d → %d components (%.1f%% variance)",
+                X_train_scaled.shape[1],
+                X_train.shape[1],
+                self.pca_variance * 100,
+            )
         else:
-            X = X_scaled
+            X_train = X_train_scaled
+            X_test = X_test_scaled
 
-        raw_labels = self.kmeans.predict(X)
-        ordered = np.array([self.rank_map[l] for l in raw_labels])
+        self.features_scaled = X_train_scaled
+        self.features_reduced = X_train
 
-        return pd.Series(ordered, index=features.index, name="regime")
+        if self.n_regimes is None:
+            self.k_selection = select_k(X_train, k_min=2, k_max=8, random_state=self.random_state)
+            self.n_regimes = self.k_selection.best_k_silhouette
+            logger.info("Auto-selected K=%d from TRAIN sample", self.n_regimes)
 
-    def peak_to_trough_labelling(self, drawdown_threshold: float = -0.1) -> pd.DataFrame:
+        self.kmeans = KMeans(
+            n_clusters=self.n_regimes,
+            n_init=30,
+            random_state=self.random_state,
+        )
+        train_raw_labels = self.kmeans.fit_predict(X_train)
+        test_raw_labels = self.kmeans.predict(X_test)
+
         daily_ret = np.log(self.close / self.close.shift(1)).mean(axis=1)
-        cumulative = (1 + daily_ret).cumprod()
-        peaks = cumulative.cummax()
-        drawdown = (cumulative - peaks) / peaks
-        self.regime_labels_ptt = pd.Series(1, index=self.features_raw.index)
-        self.regime_labels_ptt[drawdown <= drawdown_threshold] = 0
-        return self.regime_labels_ptt
-        
-    def peak_to_trough_labelling(self, drawdown_threshold: float = -0.1) -> pd.DataFrame:
-        # Label regimes using peak-to-trough drawdown logic to create accuracy metrics
-        daily_ret = np.log(self.close / self.close.shift(1)).mean(axis=1)
-        cumulative = (1 + daily_ret).cumprod()
-        peaks = cumulative.cummax()
-        drawdown = (cumulative - peaks) / peaks
-        self.regime_labels_ptt = pd.Series(1, index=self.features_raw.index)
-        self.regime_labels_ptt[drawdown <= drawdown_threshold] = 0
-        return self.regime_labels_ptt
+        daily_ret_train = daily_ret.reindex(train_features.index)
+
+        mean_ret_train = pd.Series(train_raw_labels, index=train_features.index).groupby(train_raw_labels).apply(
+            lambda g: daily_ret_train.loc[g.index].mean()
+        )
+
+        rank_map = {old: new for new, old in enumerate(mean_ret_train.sort_values().index)}
+
+        ordered_train = np.array([rank_map[l] for l in train_raw_labels])
+        ordered_test = np.array([rank_map[l] for l in test_raw_labels])
+
+        self.train_labels = pd.Series(ordered_train, index=train_features.index, name="regime")
+        self.test_labels = pd.Series(ordered_test, index=test_features.index, name="regime")
+        self.labels = pd.concat([self.train_labels, self.test_labels]).sort_index()
+
+        self.profiles = _profile_regimes(self.close, self.labels, self.features_raw)
+        self._auto_name_regimes()
+
+        return self
+
     
     def detect_regime_skmeans(self,N_S = 5, L = 100, h1 = 50, h2 = 10, epsilon = 1e-6) -> pd.Series:
         # Alternative regime detection using sliced Wasserstein k-means
@@ -658,6 +700,42 @@ class RegimeDetector:
             bt["calmar_strategy_ptt"] = bt["cum_strategy_ptt"].iloc[-1] / abs(bt["cum_strategy_ptt"].min()) if bt["cum_strategy_ptt"].min() < 0 else np.inf
             bt["ann_return_strategy_ptt"] = (bt["cum_strategy_ptt"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
             bt["ann_vol_strategy_ptt"] = bt["strategy_ret_ptt"].std() * np.sqrt(252)
+
+        return bt
+    
+    def backtest_test_only(self, initial_capital=100) -> pd.DataFrame:
+        """
+        Backtest only on the test sample after fit_train_test().
+        """
+        if self.test_index is None:
+            raise RuntimeError("Call fit_train_test(split_date=...) first.")
+
+        signals, _ = self.generate_signals()
+        signals = signals.loc[self.test_index].copy()
+
+        simple_ret = (self.close / self.close.shift(1) - 1).mean(axis=1)
+        simple_ret = simple_ret.reindex(signals.index)
+
+        bt = pd.DataFrame(index=signals.index)
+        bt["basket_ret"] = simple_ret
+        bt["strategy_ret"] = bt["basket_ret"] * signals["weight"].shift(1)
+
+        bt = bt.dropna(subset=["basket_ret", "strategy_ret"])
+
+        bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()
+        bt["cum_strategy"] = initial_capital * (1 + bt["strategy_ret"]).cumprod()
+
+        std_basket = bt["basket_ret"].std()
+        std_strategy = bt["strategy_ret"].std()
+
+        bt["sharpe_basket"] = (bt["basket_ret"].mean() / std_basket * np.sqrt(252)) if std_basket > 0 else 0.0
+        bt["sharpe_strategy"] = (bt["strategy_ret"].mean() / std_strategy * np.sqrt(252)) if std_strategy > 0 else 0.0
+
+        bt["ann_return_basket"] = (bt["cum_basket"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+        bt["ann_return_strategy"] = (bt["cum_strategy"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+
+        bt["ann_vol_basket"] = bt["basket_ret"].std() * np.sqrt(252)
+        bt["ann_vol_strategy"] = bt["strategy_ret"].std() * np.sqrt(252)
 
         return bt
 
@@ -971,7 +1049,7 @@ if __name__ == "__main__":
     print(close.tail(), "\n")
 
     rd = RegimeDetector(close, use_pca=True, pca_variance=0.95)
-    rd.fit()
+    rd.fit_train_test(split_date="2020-01-01")
 
     print("\n── Regime Summary ──")
     print(rd.summary().to_string(index=False))
@@ -981,9 +1059,15 @@ if __name__ == "__main__":
     print(signals.tail(10))
 
     print("\n── Back-test (tail) ──")
-    bt = rd.backtest()
+    bt = rd.backtest_test_only()
     print(bt.tail(10))
 
+<<<<<<< HEAD
     fig = rd.plot_regimes()
     fig.savefig("regime_report.png", dpi=150, bbox_inches="tight")
     print("\nSaved regime_report.png")
+=======
+    #fig = rd.plot_regimes()
+    #fig.savefig("regime_report.png", dpi=150, bbox_inches="tight")
+    #print("\nSaved regime_report.png")
+>>>>>>> cc90587 (Add signal lag and train test split for regime backtest)

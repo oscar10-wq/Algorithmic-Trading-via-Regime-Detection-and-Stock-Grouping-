@@ -431,7 +431,8 @@ The PCA K-Means strategy performs relatively better in the American market, achi
 
 
 \subsection{Hyperparameter tuning}
-To further validate the PCA K-Means specification, we performed a grid search over several key hyperparameters for each regional dataset. Specifically, we varied the number of regimes, whether PCA was applied, the retained PCA variance, and alternative return and volatility horizons. 
+We perform hyperparameter tuning for the PCA K-Means model, which serves as the main specification in our analysis. The other methods are included primarily for comparison, and are therefore not tuned to the same extent.
+The tuning is carried out using a grid search over several key parameters, including the number of regimes, whether PCA is applied, the level of variance retained by PCA, and the return and volatility windows used to construct the features.
 The hyperparameter grid is shown in Table~\ref{tab:tuning_grid}.
 \begin{table}[h]
 \centering

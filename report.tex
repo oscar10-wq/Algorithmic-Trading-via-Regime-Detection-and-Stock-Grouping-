@@ -489,82 +489,7 @@ These results suggest that combining dimensionality reduction with unsupervised 
 Additionally, hyperparameter tuning results show that most of the model specifications are optimal in all three markets, with PCA mainly providing useful improvements by removing redundant variation. However, more aggressive dimensionality reduction can further reduce noise and preserve key structures in high-dimensional time series. The results also show that the market regimes shows obvious regional differences, and the current feature set can well reflect the market regimes.
 One limitation of this study is that there is no limit on the number of trades, and regimes can change very quickly when the market is volatile. 
 Additionally, frequent trading incurs a lot of costs, which can affect the performance of the trading strategy.
-\appendix
-\section{Detailed Hyperparameter Tuning Results}
 
-This appendix reports the top 10 hyperparameter configurations for each regional dataset, ranked by combined score.
-
-\subsection{American Market}
-
-\begin{table}[H]
-    \centering
-    \caption{Top 10 hyperparameter configurations for the American dataset.}
-    \begin{tabular}{ccccccccc}
-        \hline
-        Rank & $K$ & PCA & PCA Var. & Return Periods & Vol Windows & Silhouette & Sharpe & Combined \\
-        \hline
-        1  & 2 & True  & 0.90 & [1,5,21]    & [21,63]    & 0.3227 & 4.5167 & 0.9141 \\
-        2  & 2 & True  & 0.95 & [1,5,21]    & [21,63]    & 0.3091 & 4.5008 & 0.9047 \\
-        3  & 2 & False & N/A  & [1,5,21]    & [21,63]    & 0.2947 & 4.5153 & 0.8999 \\
-        4  & 2 & True  & 0.90 & [1,5,21]    & [10,21,63] & 0.3314 & 4.1693 & 0.8606 \\
-        5  & 2 & True  & 0.95 & [1,5,21]    & [10,21,63] & 0.3148 & 4.1617 & 0.8510 \\
-        6  & 2 & True  & 0.90 & [1,5,21,63] & [21,63]    & 0.3286 & 4.0854 & 0.8452 \\
-        7  & 2 & False & N/A  & [1,5,21]    & [10,21,63] & 0.3030 & 4.1617 & 0.8451 \\
-        8  & 2 & True  & 0.95 & [1,5,21,63] & [21,63]    & 0.3155 & 4.0989 & 0.8409 \\
-        9  & 2 & False & N/A  & [1,5,21,63] & [21,63]    & 0.3018 & 4.0989 & 0.8341 \\
-        10 & 3 & True  & 0.90 & [1,5,21]    & [21,63]    & 0.3191 & 3.6943 & 0.7753 \\
-        \hline
-    \end{tabular}
-    \label{tab:tuning_america_top10}
-\end{table}
-
-\subsection{European Market}
-
-\begin{table}[H]
-    \centering
-    \caption{Top 10 hyperparameter configurations for the European dataset.}
-    \begin{tabular}{ccccccccc}
-        \hline
-        Rank & $K$ & PCA & PCA Var. & Return Periods & Vol Windows & Silhouette & Sharpe & Combined \\
-        \hline
-        1  & 2 & True  & 0.90 & [1,5,21]    & [21,63]    & 0.2754 & 4.1912 & 0.8362 \\
-        2  & 2 & True  & 0.95 & [1,5,21]    & [21,63]    & 0.2618 & 4.1837 & 0.8282 \\
-        3  & 2 & False & N/A  & [1,5,21]    & [21,63]    & 0.2508 & 4.1650 & 0.8196 \\
-        4  & 3 & True  & 0.90 & [1,5,21,63] & [10,21,63] & 0.2498 & 3.8258 & 0.7625 \\
-        5  & 3 & True  & 0.95 & [1,5,21,63] & [10,21,63] & 0.2319 & 3.7807 & 0.7461 \\
-        6  & 2 & True  & 0.90 & [1,5,21,63] & [21,63]    & 0.2818 & 3.6083 & 0.7423 \\
-        7  & 3 & False & N/A  & [1,5,21,63] & [10,21,63] & 0.2179 & 3.7891 & 0.7405 \\
-        8  & 2 & True  & 0.95 & [1,5,21,63] & [21,63]    & 0.2691 & 3.6115 & 0.7365 \\
-        9  & 2 & False & N/A  & [1,5,21,63] & [21,63]    & 0.2562 & 3.6381 & 0.7344 \\
-        10 & 4 & True  & 0.90 & [1,5,21]    & [10,21,63] & 0.2040 & 3.7728 & 0.7308 \\
-        \hline
-    \end{tabular}
-    \label{tab:tuning_europe_top10}
-\end{table}
-
-\subsection{Asian Market}
-
-\begin{table}[H]
-    \centering
-    \caption{Top 10 hyperparameter configurations for the Asian dataset.}
-    \begin{tabular}{ccccccccc}
-        \hline
-        Rank & $K$ & PCA & PCA Var. & Return Periods & Vol Windows & Silhouette & Sharpe & Combined \\
-        \hline
-        1  & 2 & True  & 0.90 & [1,5,21]    & [21,63]    & 0.2029 & 4.3604 & 0.8282 \\
-        2  & 2 & True  & 0.95 & [1,5,21]    & [21,63]    & 0.1922 & 4.3670 & 0.8240 \\
-        3  & 2 & False & N/A  & [1,5,21]    & [21,63]    & 0.1845 & 4.3743 & 0.8213 \\
-        4  & 2 & True  & 0.90 & [1,5,21,63] & [21,63]    & 0.2089 & 3.7526 & 0.7299 \\
-        5  & 2 & True  & 0.95 & [1,5,21,63] & [21,63]    & 0.1997 & 3.7529 & 0.7254 \\
-        6  & 2 & False & N/A  & [1,5,21,63] & [21,63]    & 0.1911 & 3.7575 & 0.7218 \\
-        7  & 3 & True  & 0.90 & [1,5,21]    & [21,63]    & 0.1689 & 3.7204 & 0.7045 \\
-        8  & 3 & True  & 0.95 & [1,5,21]    & [21,63]    & 0.1582 & 3.7316 & 0.7011 \\
-        9  & 2 & True  & 0.90 & [1,5,21]    & [10,21,63] & 0.2173 & 3.5439 & 0.6993 \\
-        10 & 2 & True  & 0.95 & [1,5,21]    & [10,21,63] & 0.2059 & 3.5613 & 0.6965 \\
-        \hline
-    \end{tabular}
-    \label{tab:tuning_asia_top10}
-\end{table}
 
 
 
@@ -577,7 +502,7 @@ This appendix reports the top 10 hyperparameter configurations for each regional
     \item[Implementation:] Oscar Peyron
     \item[Data Processing \& Feature Engineering:]  Oscar Peyron
     \item[Analysis:] Oscar Peyron
-    \item[Validation \& Testing:] Stefaan Fernando
+    \item[Validation \& Testing:] Stefaan Fernando, Siqi Zhang
     \item[Visualisation:] Stefaan Fernando
     \item[Writing -- Original Draft:] Oscar Peyron
     \item[Writing -- Review \& Editing:]
@@ -604,7 +529,7 @@ Overall, the team are happy with the outcome of the project and satisfied with t
 \noindent\textbf{Individual summary:}
 \begin{itemize}
     \item \textbf{Zhidian Jing:} \textit{[roles and concrete outputs to be added]}
-    \item \textbf{Siqi Zhang:} \textit{[roles and concrete outputs to be added]}
+    \item \textbf{Siqi Zhang:} splitting the dataset into training and test sets, training and testing the PCA + K-means model and the sWkmeans model, fixing the look-ahead bias issue, and modifying the sWkmeans output to a daily basis. I also obtained the hyperparameter tuning results from the tuning code and wrote the corresponding analysis in the report. I wrote Section 4.3 of the report.
     \item \textbf{Stefaan Fernando:} Implementation of the hyperparameter tuning pipeline for the K-Means regime detection model. Wrote a grid search script that systematically tested 48 combinations of hyperparameters including number of regimes, PCA settings, return periods and volatility windows. Each combination was scored using a combined metric of silhouette score and Sharpe ratio.
     \item \textbf{Daniel Greenstein:} \textit{[roles and concrete outputs to be added]}
     \item \textbf{Oscar Peyron:} Implementation of the PCA K-Means pipeline for regime detection. This included data processing, feature engineering, model fitting, and backtesting of the trading strategy. Oscar performed preliminary hyperparameter tuning for the number of regimes. Wrote part of the original draft, particularly the methodology and results sections.

@@ -101,11 +101,12 @@ We evaluate the quality of each detection method using a trading strategy that g
 \section{Introduction}
 Financial markets, especially the stock market, have complexities. Due to various factors, such as macroeconomic recession, debt crisis, and policy changes, the market will show different regimes, such as bull and bear markets. Changes in market conditions often lead to fluctuations in stock prices. In different market regimes, investors need to use different trading strategies to increase returns and reduce losses. Therefore, detecting market regimes accurately plays an important role in making investment decisions and controlling trading risks.
 
-K-means clustering and PCA are combined to identify market patterns in multidimensional financial time series. The trading strategy used to go long when the label shows bull and keep the position closed otherwise. Cumulative return, Annualized return, Annualized volatility and Sharpe ratio are used to measure the performance of trading strategies based on the results of market regime detection. The performance of the PCA k-means, the Hidden Markov Model with Gaussian Mixtures (GMMHMM), sliced-Wasserstein k-means clustering, and a simple peak-to-trough-based regime labelling method and long only were compared.
+K-means clustering and PCA are combined to identify market patterns in multidimensional financial time series. The trading strategy used to go long when the label shows bull and keep the position closed otherwise. Cumulative return, Annualized return, Annualized volatility and Sharpe ratio are used to measure the performance of trading strategies based on the results of market regime detection. The performance of the PCA k-means, the Hidden Markov Model with Gaussian Mixtures (GMMHMM), sliced-Wasserstein k-means clustering, and a simple peak-to-trough-based regime labelling method and long only strategy are compared in this project.
+In particular we fit our models on the period of 2010 to 2020 and we test the data on the period 2020 to 2024. We then compare the cumulative returns of the different strategies on the test set.
 
 % ─────────────────────────────────────────────────────────────
 \section{Data Processing and Feature Engineering}
-We track 9 major stock indices across 3 regions to develop our analysis.
+We track 9 major stock indices across 3 regions to develop our analysis from the 1st of January 2010 to 1st of January 2026.
 
 \begin{table}[H]
 \centering
@@ -264,7 +265,7 @@ DD_t = \frac{C_t - \max_{s \leq t} C_s}{\max_{s \leq t} C_s}
 where $C_t$ denotes the cumulative portfolio value at time $t$. A period is labelled as a crisis regime whenever $DD_t$ falls below a chosen threshold. Finally, a long-only strategy is included as a passive benchmark that remains fully invested throughout the sample period.
 % ─────────────────────────────────────────────────────────────
 \section{Proposed Algorithm}
-
+Here we present a detailed algorithmic outline of the PCA K-Means regime detection pipeline, summarising the key steps from raw data processing to regime labelling and ordering.
 \begin{algorithm}[H]
 \caption{K-Means Regime Detection Pipeline}
 \label{alg:regime_detection}
@@ -307,33 +308,33 @@ where $C_t$ denotes the cumulative portfolio value at time $t$. A period is labe
 \section{Results}
 
 \subsection{Optimal $K$ Selection}
-We applied k-means for $K \in \{2, \dots, 10\}$ on the PCA-reduced feature space and computed inertia and silhouette scores. As shown in Figure~\ref{fig:k_selection}, the silhouette score is maximised at $K=2$ across all regions, suggesting two dominant regimes over 2006--2020.This result suggests that, given the sample period and feature design adopted in this study, market states are primarily characterised by two dominant structures: a relatively weak bearish regime and a relatively strong bullish regime. Relative to larger values of $K$, the two-regime specification achieves better cluster separation while avoiding the introduction of excessive noise and potential overfitting. It also preserves the stability and interpretability of the detected regimes.
+We applied k-means for $K \in \{2, \dots, 10\}$ on the PCA-reduced feature space and computed inertia and silhouette scores. The silhouette score is maximised at $K=2$ across all regions, suggesting two dominant regimes over 2010--2024. This result suggests that, given the sample period and feature design adopted in this study, market states are primarily characterised by two dominant structures: a relatively weak bearish regime and a relatively strong bullish regime. Relative to larger values of $K$, the two-regime specification achieves better cluster separation while avoiding the introduction of excessive noise and potential overfitting. It also preserves the stability and interpretability of the detected regimes.
 
-\begin{figure}[H]
-    \centering
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{graphs/k_selection_america.png}
-        \caption{American indices.}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{graphs/k_selection_europe.png}
-        \caption{European indices.}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[b]{0.32\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{graphs/k_selection_asia.png}
-        \caption{Asian indices.}
-    \end{subfigure}
-    \caption{Inertia and silhouette scores for different $K$ values across regional indices.}
-    \label{fig:k_selection}
-\end{figure}
+%\begin{figure}[H]
+%    \centering
+%    \begin{subfigure}[b]{0.32\textwidth}
+%        \centering
+%        \includegraphics[width=\textwidth]{graphs/k_selection_america.png}
+%        \caption{American indices.}
+%    \end{subfigure}
+%    \hfill
+%    \begin{subfigure}[b]{0.32\textwidth}
+%        \centering
+%        \includegraphics[width=\textwidth]{graphs/k_selection_europe.png}
+%        \caption{European indices.}
+%    \end{subfigure}
+%    \hfill
+%    \begin{subfigure}[b]{0.32\textwidth}
+%        \centering
+%        \includegraphics[width=\textwidth]{graphs/k_selection_asia.png}
+%        \caption{Asian indices.}
+%    \end{subfigure}
+%    \caption{Inertia and silhouette scores for different $K$ values across regional indices.}
+%    \label{fig:k_selection}
+%\end{figure}
 
 \subsection{Regime Detection Results}
-Figure~\ref{fig:regime_profiles} shows the detected regimes overlaid on an equally weighted basket of indices for each region. In the figure, the red segments represent the crisis regime identified by the model, while the green segments indicate more favourable regimes. These periods broadly align with major historical episodes of market stress, including the 2008 global financial crisis, the 2011 European debt crisis, and the 2015--2016 period of heightened market volatility.
+Figure~\ref{fig:regime_profiles} shows the detected regimes overlaid on an equally weighted basket of indices for each region during the period 2010--2024. In the figure, the red segments represent the crisis regime identified by the model, while the green segments indicate more favourable regimes. These periods broadly align with major historical episodes of market stress, including the 2011 European debt crisis, and the 2020 COVID-19 pandemic.
 \begin{figure}[H]
     \centering
     \begin{subfigure}[b]{0.32\textwidth}
@@ -358,80 +359,78 @@ Figure~\ref{fig:regime_profiles} shows the detected regimes overlaid on an equal
 \end{figure}
 
 \subsection{Trading Strategy Comparison}
-To evaluate regime quality, we implement a long/flat strategy: go long in bullish regimes, hold cash otherwise. We benchmark PCA K-Means against GMMHMM, sliced-Wasserstein k-means, peak-to-trough labelling (20\% drawdown threshold), and a long-only baseline. All strategies start with \$100 over March 2006 -- January 2020.
+To evaluate regime quality, we implement a long/flat strategy: go long in bullish regimes, hold cash otherwise. We benchmark the PCA K-Means model against GMMHMM, sliced-Wasserstein k-means, peak-to-trough labelling (20\% drawdown threshold), and a long-only baseline. 
+We used the 95\% variance threshold for PCA and we used Return periods of 1, 5, and 21 days, rolling volatilities with windows of 21 and 63 days, momentum z-score with a window of 21 days and RSI as features for the PCA K-Means model.
+We fitted and trained the model on the period of 2010 to 2024. We then tested the data on the period 2020 to 2024.
+On the test set the training strategies start with an inital capital of \$ 100 at the 1st of January 2020 and we calculate the cumulative returns until the 1st of January 2024.
 We shift the signal by one day to avoid look-ahead bias, and we do not apply transaction costs or slippage in this backtest.
+We plot in the following the performance of the PCA K-Means strategy in red against other strategies on the test period (2020--2024) in Figure~\ref{fig:cumulative_returns}.
 \begin{figure}[H]
     \centering
-    \begin{subfigure}[b]{0.32\textwidth}
+    \begin{subfigure}[b]{0.40\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{graphs/cumulative_returns_comparison_america.png}
+        \includegraphics[width=\textwidth]{graphs/cumulative_returns_comparison_america_test.png}
         \caption{American indices.}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[b]{0.32\textwidth}
+    \begin{subfigure}[b]{0.40\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{graphs/cumulative_returns_comparison_europe.png}
+        \includegraphics[width=\textwidth]{graphs/cumulative_returns_comparison_europe_test.png}
         \caption{European indices.}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[b]{0.32\textwidth}
+    \begin{subfigure}[b]{0.40\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{graphs/cumulative_returns_comparison_asia.png}
+        \includegraphics[width=\textwidth]{graphs/cumulative_returns_comparison_asia_test.png}
         \caption{Asian indices.}
     \end{subfigure}
-    \caption{Cumulative returns of trading strategies based on different regime detection methods.}
+    \caption{Out-of-sample cumulative returns of trading strategies based on different regime detection methods.}
     \label{fig:cumulative_returns}
 \end{figure}
 
-The PCA K-Means strategy underperforms consistently more complex models such as the HMM and sW K-Means, regime detection models as shown in Table~\ref{tab:backtest_summary}.
-
+The PCA K-Means strategy underperforms consistently more complex models such as the HMM, sW K-Means as well as the long-only regime detection models as shown in Table~\ref{tab:backtest_summary_test}.
 \begin{table}[H]
 \centering
-\caption{Backtest performance summary across regional indices.}
-\label{tab:backtest_summary}
+\caption{Out-of-sample backtest (2020- 2024) performance summary across regional indices.}
+\label{tab:backtest_summary_test}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{ll|ccccc}
 \toprule
 \textbf{Region} & \textbf{Metric} & \textbf{PCA $K$-Means} & \textbf{HMM} & \textbf{sW$K$-Means} & \textbf{Peak-to-Trough} & \textbf{Long Only} \\
 \midrule
-\multirow{5}{*}{American}
- & Cumulative Return (\%)     & 164.41 & 359.87 & 487.03 & 192.45 & 291.57 \\
- & Annualised Return (\%)     & 4      & 10     & 12     & 5      & 8      \\
- & Annualised Volatility (\%) & 10     & 7      & 15     & 10     & 19     \\
- & Sharpe Ratio               & 0.40   & 1.47   & 0.85   & 0.53   & 0.51   \\
+\multirow{4}{*}{American}
+ & Cumulative Return (\%)     & 103.65  & 123.54 & 179.25 & 104.76  & 147.80 \\
+ & Annualised Return (\%)     & 1       & 5      & 16     & 1       & 10     \\
+ & Annualised Volatility (\%) & 11      & 7      & 12     & 12      & 23     \\
+ & Sharpe Ratio               & 0.14    & 0.80   & 1.28   & 0.16    & 0.54   \\
 \midrule
-\multirow{5}{*}{European}
- & Cumulative Return (\%)     & 116.90 & 148.82 & 334.00 & 83.74  & 149.99 \\
- & Annualised Return (\%)     & 1      & 3      & 9      & $-1$   & 3      \\
- & Annualised Volatility (\%) & 12     & 8      & 16     & 6      & 20     \\
- & Sharpe Ratio               & 0.15   & 0.41   & 0.63   & $-0.18$& 0.25   \\
+\multirow{4}{*}{European}
+ & Cumulative Return (\%)     & 93.17   & 128.35 & 204.98 & 88.86   & 117.51 \\
+ & Annualised Return (\%)     & $-2$    & 6      & 19     & $-3$    & 4      \\
+ & Annualised Volatility (\%) & 11      & 7      & 13     & 11      & 20     \\
+ & Sharpe Ratio               & $-0.10$ & 0.87   & 1.44   & $-0.22$ & 0.30   \\
 \midrule
-\multirow{5}{*}{Asian}
- & Cumulative Return (\%)     & 234.02 & 347.23 & 688.40 & 111.41 & 170.85 \\
- & Annualised Return (\%)     & 6      & 9      & 15     & 1      & 4      \\
- & Annualised Volatility (\%) & 11     & 9      & 14     & 6      & 19     \\
- & Sharpe Ratio               & 0.61   & 1.08   & 1.07   & 0.16   & 0.30   \\
+\multirow{4}{*}{Asian}
+ & Cumulative Return (\%)     & 86.66   & 125.46 & 148.04 & 102.01  & 104.19 \\
+ & Annualised Return (\%)     & $-3$    & 6      & 10     & 0       & 1      \\
+ & Annualised Volatility (\%) & 10      & 15     & 13     & 7       & 18     \\
+ & Sharpe Ratio               & $-0.28$ & 0.44   & 0.79   & 0.11    & 0.14   \\
 \bottomrule
 \end{tabular}%
 }
 \end{table}
-Looking at the performance metrics, the sW$K$-Means strategy achieves the highest cumulative returns across all three regions (487\%, 334\%, and 688\% for America, Europe, and Asia respectively), while the HMM delivers the best risk-adjusted performance, with Sharpe ratios of 1.47, 0.41, and 1.08. PCA $K$-Means, despite its low volatility, produces the weakest Sharpe ratios among regime-based strategies (0.40, 0.15, and 0.61), and in the American and European regions it even underperforms the long-only benchmark in terms of cumulative return.
+Looking at the performance metrics, the sW$K$-Means strategy achieves the highest cumulative returns across all three regions (179.25\%, 204.98\%, and 148.04\% for America, Europe, and Asia respectively). 
+The HMM strategy delivers consistently strong risk adjusted performance in our framework. However, our main PCA K-Means strategy underperforms the long-only benchmark in America and Asia, and it has a negative Sharpe ratio in Europe and Asia, indicating that its regime signals are not effectively capturing profitable trading opportunities in these regions. 
+The peak-to-trough method is worse than the PCA K-Means methods. 
 
-We can therefore see that the HMM captures market regimes in a way that balances return generation with risk control, as reflected by its consistently high Sharpe ratios and low volatilities (7--9\%). The sW$K$-Means method generates the largest returns but at the cost of higher volatility (14--16\%), suggesting it captures genuine regime shifts but also introduces noisier transitions. PCA $K$-Means, while producing low volatility, appears to generate overly conservative signals that fail to capitalise on favourable regimes, and the peak-to-trough method performs poorly across all regions, with a negative Sharpe ratio in Europe.
-
-\paragraph{Method-level differences.}
-From a modelling perspective, these performance differences are consistent with the mechanisms of the methods. PCA K-Means clusters daily observations in a denoised, PCA-reduced feature space built from returns, volatility, correlations, momentum z-scores, and RSI, and the resulting regimes are then ordered by mean return. This makes the method particularly effective at separating market states that are directly relevant for trading. 
-By contrast, GMM-HMM uses the same feature set but imposes a latent-state structure with probabilistic transitions, allowing it to capture regime persistence over time at the cost of stronger modelling assumptions. Sliced-Wasserstein K-Means instead clusters rolling return windows based on distributional shape and tail-risk structure, which makes it more sensitive to local changes but also more prone to noisy regime switching. 
-Peak-to-trough labelling is more interpretable but relies only on drawdown information, while the long-only strategy provides a passive benchmark with no regime adaptation.
+We can therefore see that the PCA K-Means methods, while conceptually appealing and interpretable, do not perform as well as more complex methods that either capture temporal dependencies (HMM) or distributional changes (sW$K$-Means). This suggests that the regimes detected by PCA K-Means may be too noisy or not sufficiently aligned with market conditions that drive returns, while the more sophisticated methods are better able to extract meaningful regime signals from the data.
+Its underperformance against long-only benchmarks in the three regions, indicates this major flaw in its regime detection capacity. 
 
 \paragraph{Regional differences.}
-The relative ranking of methods is broadly consistent across regions, but the magnitude of outperformance varies. In the American market, the HMM stands out with a Sharpe ratio of 1.47---the highest across all region-method pairs---while sW$K$-Means delivers the largest cumulative return at 487\%. PCA $K$-Means underperforms the long-only benchmark (164\% vs.\ 292\%), suggesting that its regime signals are poorly calibrated for U.S.\ equities. In Europe, all strategies struggle with lower absolute returns, consistent with the more subdued performance of European indices over the sample period. The sW$K$-Means method nonetheless achieves a cumulative return of 334\% with a Sharpe ratio of 0.63, while the peak-to-trough approach is the only strategy to produce a negative annualised return ($-1$\%) and Sharpe ratio ($-0.18$). The Asian region shows the strongest overall performance for sW$K$-Means (688\% cumulative return) and a near-tie in Sharpe ratios between HMM (1.08) and sW$K$-Means (1.07), indicating that both temporal and distributional regime detection approaches are effective in capturing the more volatile dynamics of Asian markets.
-
+The PCA K-Means strategy performs relatively better in the American market, achieving a positive Sharpe ratio. In contrast, it underperforms in Europe and Asia, with negative Sharpe ratios. This pattern may reflect differences in market structure and co-movement across regions. The American indices are more tightly correlated, which may lead to clearer regime separation in feature space, while the Asian indices are more heterogeneous, making regime detection more challenging.
 
 
 \subsection{Hyperparameter tuning}
-
-
 To further validate the PCA K-Means specification, we performed a grid search over several key hyperparameters for each regional dataset. Specifically, we varied the number of regimes, whether PCA was applied, the retained PCA variance, and alternative return and volatility horizons. 
 The hyperparameter grid is shown in Table~\ref{tab:tuning_grid}.
 \begin{table}[h]
@@ -485,13 +484,11 @@ The tuning results also highlight meaningful regional differences. The American 
 Adding a 63-day return horizon or a 10-day volatility window does not improve the best result. This suggests that the baseline feature set already captures the main regime information, while additional short- or long-horizon features are more likely to introduce complexity than to improve performance.
 % ─────────────────────────────────────────────────────────────
 \section{Conclusion}
-We have presented a PCA-enhanced k-means clustering pipeline for market regime detection across American, European, and Asian equity indices. The method consistently identifies two dominant regimes (bullish and bearish) that align well with known periods of market stress. When used to drive a simple long/flat trading strategy, the PCA K-Means approach delivers substantially higher cumulative returns and Sharpe ratios than alternative methods (GMMHMM, sliced-Wasserstein k-means, peak-to-trough labelling) and the long-only benchmark across all three regions.
+We have presented a PCA-enhanced k-means clustering pipeline for market regime detection across American, European, and Asian equity indices. The method identifies two dominant regimes (bullish and bearish) that align relatively well with known periods of market stress. However, when used to drive a simple long/flat trading strategy in out-of-sample test data, the PCA K-Means approach underperforms  compared to alternative methods (GMMHMM, sliced-Wasserstein k-means, peak-to-trough labelling) and the long-only benchmark across all three regions.
 These results suggest that combining dimensionality reduction with unsupervised clustering provides a robust framework for capturing market dynamics. 
 Additionally, hyperparameter tuning results show that most of the model specifications are optimal in all three markets, with PCA mainly providing useful improvements by removing redundant variation. However, more aggressive dimensionality reduction can further reduce noise and preserve key structures in high-dimensional time series. The results also show that the market regimes shows obvious regional differences, and the current feature set can well reflect the market regimes.
-One limitation of this study is that there is no limit on the number of trades, and regimes can change very quickly when the market is volatile, and frequent trading incurs a lot of costs, which can affect the performance of the trading strategy.
-Future work could explore out-of-sample regime prediction, rolling re-estimation windows, and the inclusion of additional asset classes to further validate the approach.
-
-
+One limitation of this study is that there is no limit on the number of trades, and regimes can change very quickly when the market is volatile. 
+Additionally, frequent trading incurs a lot of costs, which can affect the performance of the trading strategy.
 \appendix
 \section{Detailed Hyperparameter Tuning Results}
 

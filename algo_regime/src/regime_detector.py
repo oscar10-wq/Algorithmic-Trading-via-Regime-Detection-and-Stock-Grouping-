@@ -577,6 +577,8 @@ class RegimeDetector:
         import algo_regime.src.metrics as mt
 
         N = self.close.shape[0]
+        print(N)
+        print(f"shape of close: {self.close.shape}")
        #print(f"shape of close: {self.close.shape}")
         _, _, labels_skmeans = ws.max_mccd_unifortho_sim(N_S, self.close, self.n_regimes, L = L,  epsilon = 1e-6, h1 = h1, h2 = h2, metric = "CVaR")
         transformed_labels = mt.convert_prediction(N, labels_skmeans, h1, h2)

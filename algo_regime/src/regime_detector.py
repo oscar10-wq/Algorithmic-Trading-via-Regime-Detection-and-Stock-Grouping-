@@ -787,10 +787,11 @@ class RegimeDetector:
         return signals, signals_skmeans
     
 
+   # ── back-test helper ─────────────────────────────────────────────────
     def _expand_skmeans_signals_to_daily(
         self,
         start_index: Optional[pd.Index] = None,
-    ) -> pd.DataFrame:
+        ) -> pd.DataFrame:
         """
         Expand sparse sWkmeans regime labels to a daily index via forward fill.
 
@@ -836,8 +837,7 @@ class RegimeDetector:
         signals_daily["weight_skmeans"] = daily_regime.map(weight_map)
 
         return signals_daily
-
-   # ── back-test helper ─────────────────────────────────────────────────
+    
     def backtest(self, initial_capital=100, signals: Optional[pd.DataFrame] = None, split_date: Optional[str] = None) -> pd.DataFrame:
         """
         Simple long-only back-test: basket return × regime weight.

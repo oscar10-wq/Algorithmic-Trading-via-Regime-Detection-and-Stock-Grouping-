@@ -399,27 +399,27 @@ The PCA K-Means strategy underperforms consistently more complex models such as 
 \textbf{Region} & \textbf{Metric} & \textbf{PCA $K$-Means} & \textbf{HMM} & \textbf{sW$K$-Means} & \textbf{Peak-to-Trough} & \textbf{Long Only} \\
 \midrule
 \multirow{4}{*}{American}
- & Cumulative Return (\%)     & 103.65  & 115.39 & 183.30 & 104.76  & 147.80 \\
- & Annualised Return (\%)     & 1       & 4      & 16     & 1       & 10     \\
- & Annualised Volatility (\%) & 11      & 6      & 12     & 12      & 23     \\
- & Sharpe Ratio               & 0.14    & 0.60   & 1.35   & 0.16    & 0.54   \\
+ & Cumulative Return (\%)     & 103.65  & 115.39 & 169.39 & 104.76  & 147.80 \\
+ & Annualised Return (\%)     & 1       & 4      & 14     & 1       & 10     \\
+ & Annualised Volatility (\%) & 11      & 6      & 18     & 12      & 23     \\
+ & Sharpe Ratio               & 0.14    & 0.60   & 0.83   & 0.16    & 0.54   \\
 \midrule
 \multirow{4}{*}{European}
- & Cumulative Return (\%)     & 92.96   & 128.35 & 204.98 & 88.86   & 117.51 \\
- & Annualised Return (\%)     & $-2$    & 6      & 19     & $-3$    & 4      \\
+ & Cumulative Return (\%)     & 92.96   & 128.35 & 216.95 & 88.86   & 117.51 \\
+ & Annualised Return (\%)     & $-2$    & 6      & 21     & $-3$    & 4      \\
  & Annualised Volatility (\%) & 11      & 7      & 13     & 11      & 20     \\
- & Sharpe Ratio               & $-0.11$ & 0.87   & 1.44   & $-0.22$ & 0.30   \\
+ & Sharpe Ratio               & $-0.11$ & 0.87   & 1.58   & $-0.22$ & 0.30   \\
 \midrule
 \multirow{4}{*}{Asian}
- & Cumulative Return (\%)     & 89.13   & 125.46 & 120.66 & 102.01  & 104.19 \\
- & Annualised Return (\%)     & $-3$    & 6      & 5      & 0       & 1      \\
+ & Cumulative Return (\%)     & 89.13   & 125.46 & 117.90 & 102.01  & 104.19 \\
+ & Annualised Return (\%)     & $-3$    & 6      & 4      & 0       & 1      \\
  & Annualised Volatility (\%) & 10      & 15     & 12     & 7       & 18     \\
- & Sharpe Ratio               & $-0.22$ & 0.44   & 0.44   & 0.11    & 0.14   \\
+ & Sharpe Ratio               & $-0.22$ & 0.44   & 0.39   & 0.11    & 0.14   \\
 \bottomrule
 \end{tabular}%
 }
 \end{table}
-Looking at the performance metrics, the sW$K$-Means strategy achieves the highest cumulative returns across regions except the Asian region (183.30\%, 204.98\%, 120.66\% for America, Europe, and Asia respectively). 
+Looking at the performance metrics, the sW$K$-Means strategy achieves the highest cumulative returns across regions except the Asian region (169.39\%, 216.95\%, 117.90\% for America, Europe, and Asia respectively). 
 The HMM strategy delivers consistently strong risk adjusted performance in our framework. However, our main PCA K-Means strategy underperforms the long-only benchmark in America and Asia, and it has a negative Sharpe ratio in Europe and Asia, indicating that its regime signals are not effectively capturing profitable trading opportunities in these regions. 
 The peak-to-trough method is worse than the PCA K-Means methods only for the European market but still outperforms our model for the American and Asian markets. 
 

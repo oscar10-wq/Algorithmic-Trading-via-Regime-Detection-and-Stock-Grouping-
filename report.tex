@@ -467,11 +467,11 @@ To balance clustering quality and trading usefulness, we defined a combined scor
 \caption{Final PCA K-Means parameters by region}
 \begin{tabular}{lcccccccc}
 \hline
-Region & $K$ & PCA & PCA Var. & Return Periods & Vol Windows & Silhouette & Sharpe & Combined \\
+Region & n\_regimes & use\_pca & pca\_variance & return\_periods & vol\_windows \\
 \hline
-America & 2 & True & 0.90 & [1,5,21] & [21,63] & 0.3227 & 4.5167 & 0.9141 \\
-Europe  & 2 & True & 0.90 & [1,5,21] & [21,63] & 0.2754 & 4.1912 & 0.8362 \\
-Asia    & 2 & True & 0.90 & [1,5,21] & [21,63] & 0.2029 & 4.3604 & 0.8282 \\
+America & 2 & True & 0.9 & [1,5,21] & [10,21,63] \\
+Europe  & 4 & True & 0.9 & [1,5,21] & [21,63] \\
+Asia    & 3 & True & 0.9 & [1,5,21] & [10,21,63] \\
 \hline
 \end{tabular}
 \label{tab:tuning_best_by_region}

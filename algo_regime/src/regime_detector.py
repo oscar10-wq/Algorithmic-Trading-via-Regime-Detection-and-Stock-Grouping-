@@ -782,6 +782,57 @@ class RegimeDetector:
             signals_skmeans["weight_skmeans"] = self.labels_skmeans.map(weight_map)
 
         return signals, signals_skmeans
+    
+
+    def _expand_skmeans_signals_to_daily(
+        self,
+        start_index: Optional[pd.Index] = None,
+    ) -> pd.DataFrame:
+        """
+        Expand sparse sWkmeans regime labels to a daily index via forward fill.
+
+        Parameters
+        ----------
+        start_index : pd.Index, optional
+            If provided, restrict the expanded daily signals to this index
+            (for example the test-period daily index).
+
+        Returns
+        -------
+        pd.DataFrame
+            Daily DataFrame with columns:
+                regime_skmeans
+                weight_skmeans
+        """
+        if self.labels_skmeans is None:
+            raise RuntimeError("No sWkmeans labels available. Call detect_regime_skmeans_train_test() first.")
+
+        n = self.n_regimes
+        weight_map = {}
+        for rid in range(n):
+            if rid == n - 1:
+                weight_map[rid] = 1.0
+            elif rid == 0:
+                weight_map[rid] = 0.0
+            else:
+                weight_map[rid] = 0.5
+
+        daily_index = self.close.index
+
+        daily_regime = self.labels_skmeans.reindex(daily_index).ffill()
+
+        # avoid using any regime before the first available sWkmeans label
+        first_valid = self.labels_skmeans.index.min()
+        daily_regime.loc[daily_regime.index < first_valid] = np.nan
+
+        if start_index is not None:
+            daily_regime = daily_regime.reindex(start_index)
+
+        signals_daily = pd.DataFrame(index=daily_regime.index)
+        signals_daily["regime_skmeans"] = daily_regime
+        signals_daily["weight_skmeans"] = daily_regime.map(weight_map)
+
+        return signals_daily
 
    # ── back-test helper ─────────────────────────────────────────────────
     def backtest(self, initial_capital=100, signals: Optional[pd.DataFrame] = None) -> pd.DataFrame:
@@ -882,20 +933,22 @@ class RegimeDetector:
 
     def backtest_skmeans(self, initial_capital=100, signals: Optional[pd.DataFrame] = None) -> pd.DataFrame:
         """
-        Back-test for sWkmeans regime detection on the available sWkmeans label index.
+        Back-test for sWkmeans after expanding sparse window-level labels
+        to the full daily index via forward fill.
         """
-        if signals is None:
-            _, signals = self.generate_signals()
+        if self.labels_skmeans is None:
+            raise RuntimeError("No sWkmeans labels available. Call detect_regime_skmeans_train_test() first.")
 
-        if signals is None or signals.empty:
-            raise RuntimeError("No sWkmeans signals available. Call detect_regime_skmeans_train_test() first.")
+        signals_skmeans_daily = self._expand_skmeans_signals_to_daily()
 
         simple_ret = (self.close / self.close.shift(1) - 1).mean(axis=1)
-        simple_ret = simple_ret.reindex(signals.index)
+        simple_ret = simple_ret.reindex(signals_skmeans_daily.index)
 
-        bt = pd.DataFrame(index=signals.index)
+        bt = pd.DataFrame(index=signals_skmeans_daily.index)
         bt["basket_ret"] = simple_ret
-        bt["strategy_ret_skmeans"] = bt["basket_ret"] * signals["weight_skmeans"].shift(1)
+        bt["regime_skmeans"] = signals_skmeans_daily["regime_skmeans"]
+        bt["weight_skmeans"] = signals_skmeans_daily["weight_skmeans"]
+        bt["strategy_ret_skmeans"] = bt["basket_ret"] * bt["weight_skmeans"].shift(1)
 
         bt = bt.dropna(subset=["basket_ret", "strategy_ret_skmeans"])
 
@@ -905,35 +958,55 @@ class RegimeDetector:
         std_basket = bt["basket_ret"].std()
         std_skmeans = bt["strategy_ret_skmeans"].std()
 
-        bt["sharpe_basket"] = (bt["basket_ret"].mean() / std_basket * np.sqrt(252)) if std_basket > 0 else 0.0
-        bt["sharpe_strategy_skmeans"] = (bt["strategy_ret_skmeans"].mean() / std_skmeans * np.sqrt(252)) if std_skmeans > 0 else 0.0
+        bt["sharpe_basket"] = (
+            bt["basket_ret"].mean() / std_basket * np.sqrt(252)
+            if std_basket > 0 else 0.0
+        )
+        bt["sharpe_strategy_skmeans"] = (
+            bt["strategy_ret_skmeans"].mean() / std_skmeans * np.sqrt(252)
+            if std_skmeans > 0 else 0.0
+        )
 
-        bt["ann_return_basket"] = (bt["cum_basket"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
-        bt["ann_return_strategy_skmeans"] = (bt["cum_strategy_skmeans"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+        bt["ann_return_basket"] = (
+            (bt["cum_basket"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+        )
+        bt["ann_return_strategy_skmeans"] = (
+            (bt["cum_strategy_skmeans"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+        )
 
         bt["ann_vol_basket"] = bt["basket_ret"].std() * np.sqrt(252)
         bt["ann_vol_strategy_skmeans"] = bt["strategy_ret_skmeans"].std() * np.sqrt(252)
+
+        bt["final_capital_basket"] = bt["cum_basket"].iloc[-1]
+        bt["final_capital_strategy_skmeans"] = bt["cum_strategy_skmeans"].iloc[-1]
 
         return bt
     def backtest_skmeans_test_only(self, initial_capital=100) -> pd.DataFrame:
         """
-        Back-test sWkmeans on the test sample only.
+        Back-test sWkmeans on the test sample only, after expanding sparse
+        window-level regime labels to a daily index via forward fill.
         """
-        if self.test_index_skmeans is None:
+        if self.test_index is None:
+            raise RuntimeError("Call fit_train_test(split_date=...) first.")
+
+        if self.labels_skmeans is None:
             raise RuntimeError("Call detect_regime_skmeans_train_test() first.")
 
-        _, signals_skmeans = self.generate_signals()
-        if signals_skmeans is None:
-            raise RuntimeError("No sWkmeans signals available.")
+        # use the daily test index from the main train/test split
+        daily_test_index = self.test_index
 
-        signals_skmeans = signals_skmeans.loc[self.test_index_skmeans].copy()
+        signals_skmeans_daily = self._expand_skmeans_signals_to_daily(start_index=daily_test_index)
 
         simple_ret = (self.close / self.close.shift(1) - 1).mean(axis=1)
-        simple_ret = simple_ret.reindex(signals_skmeans.index)
+        simple_ret = simple_ret.reindex(daily_test_index)
 
-        bt = pd.DataFrame(index=signals_skmeans.index)
+        bt = pd.DataFrame(index=daily_test_index)
         bt["basket_ret"] = simple_ret
-        bt["strategy_ret_skmeans"] = bt["basket_ret"] * signals_skmeans["weight_skmeans"].shift(1)
+        bt["regime_skmeans"] = signals_skmeans_daily["regime_skmeans"]
+        bt["weight_skmeans"] = signals_skmeans_daily["weight_skmeans"]
+
+        # use yesterday's signal to trade today
+        bt["strategy_ret_skmeans"] = bt["basket_ret"] * bt["weight_skmeans"].shift(1)
 
         bt = bt.dropna(subset=["basket_ret", "strategy_ret_skmeans"])
 
@@ -943,14 +1016,27 @@ class RegimeDetector:
         std_basket = bt["basket_ret"].std()
         std_skmeans = bt["strategy_ret_skmeans"].std()
 
-        bt["sharpe_basket"] = (bt["basket_ret"].mean() / std_basket * np.sqrt(252)) if std_basket > 0 else 0.0
-        bt["sharpe_strategy_skmeans"] = (bt["strategy_ret_skmeans"].mean() / std_skmeans * np.sqrt(252)) if std_skmeans > 0 else 0.0
+        bt["sharpe_basket"] = (
+            bt["basket_ret"].mean() / std_basket * np.sqrt(252)
+            if std_basket > 0 else 0.0
+        )
+        bt["sharpe_strategy_skmeans"] = (
+            bt["strategy_ret_skmeans"].mean() / std_skmeans * np.sqrt(252)
+            if std_skmeans > 0 else 0.0
+        )
 
-        bt["ann_return_basket"] = (bt["cum_basket"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
-        bt["ann_return_strategy_skmeans"] = (bt["cum_strategy_skmeans"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+        bt["ann_return_basket"] = (
+            (bt["cum_basket"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+        )
+        bt["ann_return_strategy_skmeans"] = (
+            (bt["cum_strategy_skmeans"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+        )
 
         bt["ann_vol_basket"] = bt["basket_ret"].std() * np.sqrt(252)
         bt["ann_vol_strategy_skmeans"] = bt["strategy_ret_skmeans"].std() * np.sqrt(252)
+
+        bt["final_capital_basket"] = bt["cum_basket"].iloc[-1]
+        bt["final_capital_strategy_skmeans"] = bt["cum_strategy_skmeans"].iloc[-1]
 
         return bt
     # ── plotting ─────────────────────────────────────────────────────────

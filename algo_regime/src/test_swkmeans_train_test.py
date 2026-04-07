@@ -69,6 +69,9 @@ rd.detect_regime_skmeans_train_test(
     metric="CVaR",
 )
 
+
+
+
 print(rd.train_labels_skmeans.head())
 print(rd.test_labels_skmeans.head())
 print(rd.labels_skmeans.tail())
@@ -93,3 +96,12 @@ print("\nAny non-positive prices?")
 print((close <= 0).sum())
 print("\nMissing values in close:")
 print(close.isna().sum())
+
+
+bt_sk = rd.backtest_skmeans_test_only()
+
+
+print(bt_sk.head())
+print(bt_sk.tail())
+print("Number of daily test rows in skmeans backtest:", len(bt_sk))
+print("Number of daily test rows in main backtest:", len(rd.backtest_test_only()))

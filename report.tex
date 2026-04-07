@@ -99,7 +99,7 @@ We evaluate the quality of each detection method using a trading strategy that g
 
 % ─────────────────────────────────────────────────────────────
 \section{Introduction}
-Financial markets, especially the stock market, have complexities. Due to various factors, such as macroeconomic recession, debt crisis, and policy changes, the market will show different regimes, such as bull and bear markets. Changes in market conditions often lead to fluctuations in stock prices. In different market regimes, investors need to use different trading strategies to increase returns and reduce losses. Therefore, detecting market regimes accurately plays an important role in making investment decisions and controlling trading risks.
+Financial markets, especially the stock market, have complexities. Due to various factors, such as macroeconomic recession, debt crisis, and policy changes, the market will show different regimes, such as bull and bear markets. Changes in market conditions often lead to fluctuations in stock prices. In different market regimes, investors need to use different trading strategies to increase returns and reduce losses. Therefore, detecting market regimes accurately plays an important role in making investment decisions and controlling trading risks. Traditional means of regime classification use a rules-based definition, such as the peak-to-trough regime labelling method. In contrast, unsupervised learning models identify regimes endogenously from the data, allowing for a more flexible and data-driven characterisation of market states.
 
 K-means clustering and PCA are combined to identify market patterns in multidimensional financial time series. The trading strategy used to go long when the label shows bull and keep the position closed otherwise. Cumulative return, Annualized return, Annualized volatility and Sharpe ratio are used to measure the performance of trading strategies based on the results of market regime detection. The performance of the PCA k-means, the Hidden Markov Model with Gaussian Mixtures (GMMHMM), sliced-Wasserstein k-means clustering, and a simple peak-to-trough-based regime labelling method and long only strategy are compared in this project.
 In particular we fit our models on the period of 2010 to 2020 and we test the data on the period 2020 to 2024. We then compare the cumulative returns of the different strategies on the test set.
@@ -483,6 +483,14 @@ The tuning results also highlight meaningful regional differences. The American 
 
 Adding a 63-day return horizon or a 10-day volatility window does not improve the best result. This suggests that the baseline feature set already captures the main regime information, while additional short- or long-horizon features are more likely to introduce complexity than to improve performance.
 % ─────────────────────────────────────────────────────────────
+
+\section{Limitations}
+Our analysis is limited in several key ways. Firstly, all model classification performance is assessed on the results from the trading strategy. Whilst this is a useful proxy, it assumes that true regime classification translates to superior trading performance. In future work, the model performance could be tested using alternative methods. For instance, testing the models' regime classifiers against traditional rules-based methodologies such as drawdown or peak-to-trough labelling, allowing classification accuracy to be tested more directly. 
+
+Moreover, all trading performance was measured in the absence of transaction costs. This is an unrealistic expectation, and may have overstated the performance of models which frequently switch regimes. For future work, modelling these costs, such as bid-ask spreads with the Roll Model, may provide a more realistic assessment of model performance.
+
+Another limitation concerns the lack of depth for training and testing of the models. We tested on a four-year period from 2020 to 2024. Although this was a highly volatile and varied period (e.g. COVID and subsequent recovery), a four-year window for testing limits the reliability and robustness of results. In future, increasing the size of the testing and training window would offer greater insight into the performance of the models. In addition, evaluating performance in varying market conditions would give more understanding on how the models adapt to different enviroments.
+
 \section{Conclusion}
 We have presented a PCA-enhanced k-means clustering pipeline for market regime detection across American, European, and Asian equity indices. The method identifies two dominant regimes (bullish and bearish) that align relatively well with known periods of market stress. However, when used to drive a simple long/flat trading strategy in out-of-sample test data, the PCA K-Means approach underperforms  compared to alternative methods (GMMHMM, sliced-Wasserstein k-means, peak-to-trough labelling) and the long-only benchmark across all three regions.
 These results suggest that combining dimensionality reduction with unsupervised clustering provides a robust framework for capturing market dynamics. 
@@ -574,14 +582,14 @@ This appendix reports the top 10 hyperparameter configurations for each regional
 \begin{description}
     \item[Conceptualisation:]
     \item[Methodology:] Oscar Peyron
-    \item[Implementation:] Oscar Peyron
+    \item[Implementation:] Oscar Peyron, Daniel Greenstein
     \item[Data Processing \& Feature Engineering:]  Oscar Peyron
     \item[Analysis:] Oscar Peyron
     \item[Validation \& Testing:] 
     \item[Visualisation:]
-    \item[Writing -- Original Draft:] Oscar Peyron
-    \item[Writing -- Review \& Editing:]
-    \item[Project Administration:]
+    \item[Writing -- Original Draft:] Oscar Peyron, Daniel Greenstein
+    \item[Writing -- Review \& Editing:] Daniel Greenstein
+    \item[Project Administration:] Daniel Greenstein
 \end{description}
 
 \subsection{Reflection on Team Work}
@@ -606,7 +614,7 @@ Overall, the team are happy with the outcome of the project and satisfied with t
     \item \textbf{Zhidian Jing:} \textit{[roles and concrete outputs to be added]}
     \item \textbf{Siqi Zhang:} \textit{[roles and concrete outputs to be added]}
     \item \textbf{Stefaan Fernando:} \textit{[roles and concrete outputs to be added]}
-    \item \textbf{Daniel Greenstein:} \textit{[roles and concrete outputs to be added]}
+    \item \textbf{Daniel Greenstein:} Implementation of the Hidden Markov Model with Gaussian mixtures. This involved model fitting, parameter specificaiton and methodology write up. Involved in the write up, particularly for limitations, reflections and review. Involved in project administration, organising meetings.
     \item \textbf{Oscar Peyron:} Implementation of the PCA K-Means pipeline for regime detection. This included data processing, feature engineering, model fitting, and backtesting of the trading strategy. Oscar performed preliminary hyperparameter tuning for the number of regimes. Wrote part of the original draft, particularly the methodology and results sections.
 \end{itemize}
 \subsection{AI Statement}

@@ -180,11 +180,11 @@ We merge all features (log-returns, rolling volatility, correlation, z-score, RS
 \renewcommand{\arraystretch}{1.1}
 \begin{tabular}{l c c}
 \toprule
-\textbf{Region} & \textbf{Raw dimensions} & \textbf{After PCA} \\
+\textbf{Region} & \textbf{Raw dimensions (Train + Test)} & \textbf{After PCA (Train + Test Data)} \\
 \midrule
-America & $(3460, 24)$ & $(3460, 7)$ \\
-Europe  & $(3523, 24)$ & $(3523, 10)$ \\
-Asia    & $(3561, 24)$ & $(3561, 14)$ \\
+America & $(3459, 24)$ & $(3459, 8)$ \\
+Europe  & $(3527, 24)$ & $(3527, 7)$ \\
+Asia    & $(3564, 24)$ & $(3564, 11)$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -308,30 +308,30 @@ Here we present a detailed algorithmic outline of the PCA K-Means regime detecti
 \section{Results}
 
 \subsection{Optimal $K$ Selection}
-We applied k-means for $K \in \{2, \dots, 10\}$ on the PCA-reduced feature space and computed inertia and silhouette scores. The silhouette score is maximised at $K=2$ across all regions, suggesting two dominant regimes over 2010--2024. This result suggests that, given the sample period and feature design adopted in this study, market states are primarily characterised by two dominant structures: a relatively weak bearish regime and a relatively strong bullish regime. Relative to larger values of $K$, the two-regime specification achieves better cluster separation while avoiding the introduction of excessive noise and potential overfitting. It also preserves the stability and interpretability of the detected regimes.
+We applied k-means for $K \in \{2, \dots, 10\}$ on the PCA-reduced feature space and computed inertia and silhouette scores. The silhouette score is maximised at $K=2$ across all regions, suggesting two dominant regimes over 2010--2020. This result suggests that, given the sample period and feature design adopted in this study, market states are primarily characterised by two dominant structures: a relatively weak bearish regime and a relatively strong bullish regime. Relative to larger values of $K$, the two-regime specification achieves better cluster separation while avoiding the introduction of excessive noise and potential overfitting. It also preserves the stability and interpretability of the detected regimes.
 
-%\begin{figure}[H]
-%    \centering
-%    \begin{subfigure}[b]{0.32\textwidth}
-%        \centering
-%        \includegraphics[width=\textwidth]{graphs/k_selection_america.png}
-%        \caption{American indices.}
-%    \end{subfigure}
-%    \hfill
-%    \begin{subfigure}[b]{0.32\textwidth}
-%        \centering
-%        \includegraphics[width=\textwidth]{graphs/k_selection_europe.png}
-%        \caption{European indices.}
-%    \end{subfigure}
-%    \hfill
-%    \begin{subfigure}[b]{0.32\textwidth}
-%        \centering
-%        \includegraphics[width=\textwidth]{graphs/k_selection_asia.png}
-%        \caption{Asian indices.}
-%    \end{subfigure}
-%    \caption{Inertia and silhouette scores for different $K$ values across regional indices.}
-%    \label{fig:k_selection}
-%\end{figure}
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{graphs/k_selection_america.png}
+        \caption{American indices.}
+   \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{graphs/k_selection_europe.png}
+        \caption{European indices.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{graphs/k_selection_asia.png}
+        \caption{Asian indices.}
+    \end{subfigure}
+    \caption{Inertia and silhouette scores for different $K$ values across regional indices.}
+    \label{fig:k_selection}
+\end{figure}
 
 \subsection{Regime Detection Results}
 Figure~\ref{fig:regime_profiles} shows the detected regimes overlaid on an equally weighted basket of indices for each region during the period 2010--2024. In the figure, the red segments represent the crisis regime identified by the model, while the green segments indicate more favourable regimes. These periods broadly align with major historical episodes of market stress, including the 2011 European debt crisis, and the 2020 COVID-19 pandemic.
@@ -391,7 +391,7 @@ We plot in the following the performance of the PCA K-Means strategy in red agai
 The PCA K-Means strategy underperforms consistently more complex models such as the HMM, sW K-Means as well as the long-only regime detection models as shown in Table~\ref{tab:backtest_summary_test}.
 \begin{table}[H]
 \centering
-\caption{Out-of-sample backtest (2020- 2024) performance summary across regional indices.}
+\caption{Out-of-sample backtest (2020--2024) performance summary across regional indices.}
 \label{tab:backtest_summary_test}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{ll|ccccc}
@@ -399,29 +399,29 @@ The PCA K-Means strategy underperforms consistently more complex models such as 
 \textbf{Region} & \textbf{Metric} & \textbf{PCA $K$-Means} & \textbf{HMM} & \textbf{sW$K$-Means} & \textbf{Peak-to-Trough} & \textbf{Long Only} \\
 \midrule
 \multirow{4}{*}{American}
- & Cumulative Return (\%)     & 103.65  & 123.54 & 179.25 & 104.76  & 147.80 \\
- & Annualised Return (\%)     & 1       & 5      & 16     & 1       & 10     \\
- & Annualised Volatility (\%) & 11      & 7      & 12     & 12      & 23     \\
- & Sharpe Ratio               & 0.14    & 0.80   & 1.28   & 0.16    & 0.54   \\
+ & Cumulative Return (\%)     & 103.65  & 115.39 & 183.30 & 104.76  & 147.80 \\
+ & Annualised Return (\%)     & 1       & 4      & 16     & 1       & 10     \\
+ & Annualised Volatility (\%) & 11      & 6      & 12     & 12      & 23     \\
+ & Sharpe Ratio               & 0.14    & 0.60   & 1.35   & 0.16    & 0.54   \\
 \midrule
 \multirow{4}{*}{European}
- & Cumulative Return (\%)     & 93.17   & 128.35 & 204.98 & 88.86   & 117.51 \\
+ & Cumulative Return (\%)     & 92.96   & 128.35 & 204.98 & 88.86   & 117.51 \\
  & Annualised Return (\%)     & $-2$    & 6      & 19     & $-3$    & 4      \\
  & Annualised Volatility (\%) & 11      & 7      & 13     & 11      & 20     \\
- & Sharpe Ratio               & $-0.10$ & 0.87   & 1.44   & $-0.22$ & 0.30   \\
+ & Sharpe Ratio               & $-0.11$ & 0.87   & 1.44   & $-0.22$ & 0.30   \\
 \midrule
 \multirow{4}{*}{Asian}
- & Cumulative Return (\%)     & 86.66   & 125.46 & 148.04 & 102.01  & 104.19 \\
- & Annualised Return (\%)     & $-3$    & 6      & 10     & 0       & 1      \\
- & Annualised Volatility (\%) & 10      & 15     & 13     & 7       & 18     \\
- & Sharpe Ratio               & $-0.28$ & 0.44   & 0.79   & 0.11    & 0.14   \\
+ & Cumulative Return (\%)     & 89.13   & 125.46 & 120.66 & 102.01  & 104.19 \\
+ & Annualised Return (\%)     & $-3$    & 6      & 5      & 0       & 1      \\
+ & Annualised Volatility (\%) & 10      & 15     & 12     & 7       & 18     \\
+ & Sharpe Ratio               & $-0.22$ & 0.44   & 0.44   & 0.11    & 0.14   \\
 \bottomrule
 \end{tabular}%
 }
 \end{table}
-Looking at the performance metrics, the sW$K$-Means strategy achieves the highest cumulative returns across all three regions (179.25\%, 204.98\%, and 148.04\% for America, Europe, and Asia respectively). 
+Looking at the performance metrics, the sW$K$-Means strategy achieves the highest cumulative returns across regions except the Asian region (183.30\%, 204.98\%, 120.66\% for America, Europe, and Asia respectively). 
 The HMM strategy delivers consistently strong risk adjusted performance in our framework. However, our main PCA K-Means strategy underperforms the long-only benchmark in America and Asia, and it has a negative Sharpe ratio in Europe and Asia, indicating that its regime signals are not effectively capturing profitable trading opportunities in these regions. 
-The peak-to-trough method is worse than the PCA K-Means methods. 
+The peak-to-trough method is worse than the PCA K-Means methods only for the European market but still outperforms our model for the American and Asian markets. 
 
 We can therefore see that the PCA K-Means methods, while conceptually appealing and interpretable, do not perform as well as more complex methods that either capture temporal dependencies (HMM) or distributional changes (sW$K$-Means). This suggests that the regimes detected by PCA K-Means may be too noisy or not sufficiently aligned with market conditions that drive returns, while the more sophisticated methods are better able to extract meaningful regime signals from the data.
 Its underperformance against long-only benchmarks in the three regions, indicates this major flaw in its regime detection capacity. 
@@ -584,6 +584,23 @@ This appendix reports the top 10 hyperparameter configurations for each regional
     \item[Project Administration:]
 \end{description}
 
+\subsection{Reflection on Team Work}
+For this project, our team focussed on evaluating machine learning techniques on regime detection, with a primary focus on K-means and PCA. We settled on this project after a group polling system where various ideas were suggested, before selecting the majority vote. This ensured that the motivation for the group work  was not driven by a single individual.
+
+We split the work into several sections: model selection and coding, backtesting, hyperparameter selection, project write up and overall review. Tasks were then distributed based on individual preferences and skillsets (eg. coding ability, machine-learning knowledge, write-up ability) to assign work in the most effective way and in areas where members were most comfortable.
+
+We utilised Teams to discuss what work had been performed and what required future attention. Meetings were conducted frequently, to track progress and align on next steps. Individual roles were tweaked and refined as workload evolved.
+In addition, we set up a WhatsApp group for discussion of specifics and individual queries. This enabled quick clarification of issues without requiring full meetings. A GitHub repository was also set up to provide a centralised workspace. This ensured each individual could work on up-to-date versions of the material, and live changes could be observed.
+
+The team worked effectively together, and the individual contributions were well divided. In addition, the democratic selection for the project ensured that motivation and participation were high throughout.
+
+Occasionally, competing coursework deadlines created a slight workload imbalance in the team, although this did not signifcantly impact overall progress. For future, an explicit review of deadlines should be conducted at the start of the project, to aid planning and workload distribution more efficiently.
+That said, overall contribution from all members was fair and satisfactory.
+
+One challenge we did encounter was the finding of unreasonably strong trading returns. Subsequent analysis found some of the code had incorporated a form of look-ahead bias. The models had been trained on future data, creating falsely optimistic results. This was immediately notified to all members, and the data pipeline was corrected. Ultimately, trading returns and performance metrics(eg. Sharpe) began to show more realistic outcomes.
+
+Overall, the team are happy with the outcome of the project and satisfied with the work of each individual.
+
 \noindent\textbf{Individual summary:}
 \begin{itemize}
     \item \textbf{Zhidian Jing:} \textit{[roles and concrete outputs to be added]}
@@ -592,8 +609,6 @@ This appendix reports the top 10 hyperparameter configurations for each regional
     \item \textbf{Daniel Greenstein:} \textit{[roles and concrete outputs to be added]}
     \item \textbf{Oscar Peyron:} Implementation of the PCA K-Means pipeline for regime detection. This included data processing, feature engineering, model fitting, and backtesting of the trading strategy. Oscar performed preliminary hyperparameter tuning for the number of regimes. Wrote part of the original draft, particularly the methodology and results sections.
 \end{itemize}
-\subsection{Reflection on Team Work}
-
 \subsection{AI Statement}
 
 Generative AI tools (Claude, Gemini) were used in two capacities during this project:

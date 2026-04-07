@@ -389,6 +389,7 @@ class RegimeDetector:
         self.scaler: Optional[StandardScaler] = None
         self.pca: Optional[PCA] = None
         self.k_selection: Optional[KSelectionResult] = None
+        self.k_selection_train: Optional[KSelectionResult] = None
         self.kmeans: Optional[KMeans] = None
         self.labels: Optional[pd.Series] = None
         self.profiles: Optional[List[RegimeProfile]] = None
@@ -424,11 +425,12 @@ class RegimeDetector:
             vol_windows=self.vol_windows,
         )
 
+        print(self.features_raw.shape)
         # 2. standardise
         self.scaler = StandardScaler()
         self.features_scaled = self.scaler.fit_transform(self.features_raw)
 
-        print(self.features_raw.shape)
+        print(self.features_scaled.shape)
         # 3. optional PCA
         if self.use_pca:
             self.pca = PCA(n_components=self.pca_variance, random_state=self.random_state)
@@ -444,7 +446,6 @@ class RegimeDetector:
 
         X = self.features_reduced
         print(X.shape)
-
         print(f"shape of feature_reduced: {X.shape}")
         # 4. select K
         if self.n_regimes is None:
@@ -1127,7 +1128,15 @@ class RegimeDetector:
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
         plt.tight_layout()
         return fig
-
+    def plot_regime_profile_train_only(self, figsize: Tuple[int, int] = (10,8)):
+        """Same as plot_regime_profile but only for the training sample."""
+        if self.train_index is None:
+            raise RuntimeError("Call fit_train_test(split_date=...) first.")
+        original_labels = self.labels
+        self.labels = self.train_labels
+        fig = self.plot_regime_profile(figsize=figsize)
+        self.labels = original_labels
+        return fig
     def plot_cluster_pca(self, figsize: Tuple[int, int] = (10, 8)):
         """Scatter of regime clusters in first two PCA components."""
         import matplotlib.pyplot as plt

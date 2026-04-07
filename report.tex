@@ -360,7 +360,7 @@ Figure~\ref{fig:regime_profiles} shows the detected regimes overlaid on an equal
 
 \subsection{Trading Strategy Comparison}
 To evaluate regime quality, we implement a long/flat strategy: go long in bullish regimes, hold cash otherwise. We benchmark the PCA K-Means model against GMMHMM, sliced-Wasserstein k-means, peak-to-trough labelling (20\% drawdown threshold), and a long-only baseline. 
-We used the 95\% variance threshold for PCA and we used Return periods of 1, 5, and 21 days, rolling volatilities with windows of 21 and 63 days, momentum z-score with a window of 21 days and RSI as features for the PCA K-Means model.
+We used the 90\% variance threshold for PCA and we used Return periods of 1, 5, and 21 days, rolling volatilities with windows of 21 and 63 days, momentum z-score with a window of 21 days and RSI as features for the PCA K-Means model.
 We fitted and trained the model on the period of 2010 to 2024. We then tested the data on the period 2020 to 2024.
 On the test set the training strategies start with an inital capital of \$ 100 at the 1st of January 2020 and we calculate the cumulative returns until the 1st of January 2024.
 We shift the signal by one day to avoid look-ahead bias, and we do not apply transaction costs or slippage in this backtest.
@@ -431,9 +431,8 @@ The PCA K-Means strategy performs relatively better in the American market, achi
 
 
 \subsection{Hyperparameter tuning}
-We perform hyperparameter tuning for the PCA K-Means model, which serves as the main specification in our analysis. The other methods are included primarily for comparison, and are therefore not tuned to the same extent.
-The tuning is carried out using a grid search over several key parameters, including the number of regimes, whether PCA is applied, the level of variance retained by PCA, and the return and volatility windows used to construct the features.
-The hyperparameter grid is shown in Table~\ref{tab:tuning_grid}.
+We perform hyperparameter tuning for the PCA K-Means model to identify the preferred specification across different regional markets.
+The tuning is carried out using a grid search over several key parameters, and the corresponding hyperparameter grid is shown in Table~\ref{tab:tuning_grid}.
 \begin{table}[h]
 \centering
 \caption{Hyperparameter grid for PCA K-Means tuning.}
@@ -451,7 +450,17 @@ $n\_regimes$ & $\{2,3,4,5\}$ \\
 \label{tab:tuning_grid}
 \end{table}
 
-Each specification was evaluated using both the silhouette score and the Sharpe ratio of the corresponding regime-based trading strategy. The silhouette score measures how clearly separated the detected clusters are, while the Sharpe ratio measures the risk-adjusted return of the resulting strategy.
+The hyperparameters are defined as follows.
+
+\begin{itemize}[itemsep=0em, topsep=0em]
+    \item \texttt{n\_regimes}: the number of market states the clustering model is allowed to identify.
+    \item \texttt{use\_pca}: whether PCA is applied before clustering.
+    \item \texttt{pca\_variance}: how much of the total variance is retained by PCA.
+    \item \texttt{return\_periods}: the time horizons used to construct return features.
+    \item \texttt{vol\_windows}: the time windows used to construct volatility features.
+\end{itemize}
+
+Each parameter combination is evaluated using both the silhouette score and the Sharpe ratio of the corresponding regime-based trading strategy. The silhouette score measures how clearly separated the detected clusters are, while the Sharpe ratio measures the risk-adjusted return of the resulting strategy.
 To balance clustering quality and trading usefulness, we defined a combined score as an equally weighted average of the silhouette score and a rescaled Sharpe ratio:
 \begin{equation}
 \label{eq:combined_score}
@@ -461,6 +470,8 @@ To balance clustering quality and trading usefulness, we defined a combined scor
 +
 0.5 \times \frac{\text{Sharpe}}{3}.
 \end{equation}
+
+Table~\ref{tab:tuning_best_by_region} reflects the preferred configuration within the PCA K-Means framework, rather than the overall ranking of this method against all other models.
 
 \begin{table}[h]
 \centering
@@ -477,12 +488,19 @@ Asia    & 3 & True & 0.9 & [1,5,21] & [10,21,63] \\
 \label{tab:tuning_best_by_region}
 \end{table}
 
-The tuning results are remarkably consistent across regions. The detailed tuning results for each region are reported in the Appendix. As shown in Table~\ref{tab:tuning_best_by_region}, the best-performing specification is the same in all three markets: \(K=2\), with PCA enabled, 90\% retained variance, return periods of \([1,5,21]\), and volatility windows of \([21,63]\). This strongly supports the main model specification and confirms that a simple two-regime structure is most effective under the current feature design.
-The consistency of the top-ranked configuration also suggests that PCA provides a useful, though moderate, improvement. In all three markets, the best non-PCA specification ranks just below the top PCA-based models, indicating that the raw feature set is already informative, while PCA mainly helps by removing redundant variation and producing a more compact representation. Similarly, retaining 90\% of variance slightly outperforms retaining 95\%, which suggests that a more aggressive dimensionality reduction can reduce noise without losing the key structure needed for clustering.
+The tuning results show several common patterns across the three regions. First, all regions prefer using PCA with 90\% of the variance, suggesting that moderate dimensionality reduction helps remove redundant information and noise while preserving the main clustering structure. 
+Second, all three regions select return periods of \([1,5,21]\), rather than including a 63-day return horizon implying that short- and medium-term return dynamics already contain most of the information for regime detection in our framework.
+The main regional differences appear in the number of regimes and the volatility windows. The American market prefers 2 regimes, consistent with a relatively clear two-state structure such as bullish versus bearish conditions.
+The Asian market prefers 3 regimes, while the European market prefers 4, indicating that these markets require finer distinctions in regime structure. This suggesting that a simple binary bull/bear split may be too coarse to capture the full variation in market behaviour over the sample period.
+This also suggests that the simpler structure favoured by silhouette score alone does not necessarily match the specification that performs best under the combined score.
+Therefore, the \(K=2\) result in Section~6.1 is better interpreted as a benchmark for cluster structure, while Table~5 reflects the more suitable full parameter combination for each region under the combined evaluation criterion.
 
-The tuning results also highlight meaningful regional differences. The American market achieves the highest silhouette and combined score, indicating the clearest regime separation and the strongest overall clustering structure. Europe ranks second, while Asia has the lowest silhouette score, although its Sharpe ratio remains strong. This pattern is consistent with the earlier interpretation that the Asian indices are more heterogeneous, making their regimes harder to separate cleanly in feature space, while the stronger co-movement in the American indices leads to more clearly defined market states.
+The volatility-window resultsalso differ across regions. Both the American and Asian markets prefer \([10,21,63]\), suggesting that shorter-term volatility information adds value for regime detection in these markets, and that regime changes may be more sensitive to short-run risk fluctuations. 
+In contrast, the European market prefers \([21,63]\), indicating that smoother medium-term volatility measures are more informative than short-term volatility for capturing changes. Overall, the PCA K-Means framework is fairly stable across regions, since the use of PCA, the PCA variance threshold, and the return-period setting are consistent across all three regions. 
+However, the optimal number of regimes and volatility windows still differ clearly by region, suggesting that the specific feature design remains influenced by differences in regional market structure.
 
-Adding a 63-day return horizon or a 10-day volatility window does not improve the best result. This suggests that the baseline feature set already captures the main regime information, while additional short- or long-horizon features are more likely to introduce complexity than to improve performance.
+
+
 % ─────────────────────────────────────────────────────────────
 
 \section{Limitations}
@@ -512,20 +530,16 @@ Additionally, frequent trading incurs a lot of costs, which can affect the perfo
     \item[Data Processing \& Feature Engineering:]  Oscar Peyron
     \item[Model Training:] Siqi Zhang
     \item[Analysis:] Oscar Peyron
-<<<<<<< HEAD
     \item[Validation \& Testing:] Stefaan Fernando, Siqi Zhang
     \item[Visualisation:] Stefaan Fernando
     \item[Debug:] Siqi Zhang, Zhidian Jing
-    \item[Writing -- Original Draft:] Oscar Peyron, Zhidian Jing
-    \item[Writing -- Review \& Editing:]
-    \item[Project Administration:]
-=======
+    \item[Writing -- Original Draft:] Oscar Peyron, Zhidian Jing, Siqi Zhang
     \item[Validation \& Testing:] Stefaan Fernando
     \item[Visualisation:]Stefaan Fernando
     \item[Writing -- Original Draft:] Oscar Peyron, Daniel Greenstein, Zhidian Jing
     \item[Writing -- Review \& Editing:]Daniel Greenstein, Zhidian Jing
     \item[Project Administration:]Daniel Greenstein
->>>>>>> 3504284d34a15aa622ef30799737ca7b9614fc30
+
 \end{description}
 
 \subsection{Reflection on Team Work}

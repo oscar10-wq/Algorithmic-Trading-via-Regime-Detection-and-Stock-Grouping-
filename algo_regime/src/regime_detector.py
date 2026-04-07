@@ -835,7 +835,7 @@ class RegimeDetector:
         return signals_daily
 
    # ── back-test helper ─────────────────────────────────────────────────
-    def backtest(self, initial_capital=100, signals: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    def backtest(self, initial_capital=100, signals: Optional[pd.DataFrame] = None, split_date: Optional[str] = None) -> pd.DataFrame:
         """
         Simple long-only back-test: basket return × regime weight.
         Returns DataFrame with columns:
@@ -846,7 +846,11 @@ class RegimeDetector:
 
         # Use simple (arithmetic) returns so weighting is valid
         simple_ret = (self.close / self.close.shift(1) - 1).mean(axis=1)
-        print(f"shape of simple_ret: {simple_ret.shape}")
+        
+        if split_date is not None:
+            split_ret = simple_ret.loc[:split_date]
+            signals = signals.loc[:split_date]
+
         simple_ret = simple_ret.reindex(signals.index)
 
         bt = pd.DataFrame(index=signals.index)
@@ -912,10 +916,18 @@ class RegimeDetector:
         bt["basket_ret"] = simple_ret
         bt["strategy_ret"] = bt["basket_ret"] * signals["weight"].shift(1)
 
+        if "weight_ptt" in signals.columns:
+            bt["strategy_ret_ptt"] = bt["basket_ret"] * signals["weight_ptt"].shift(1)
+
+
         bt = bt.dropna(subset=["basket_ret", "strategy_ret"])
 
         bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()
         bt["cum_strategy"] = initial_capital * (1 + bt["strategy_ret"]).cumprod()
+
+        
+        if "strategy_ret_ptt" in bt.columns:
+            bt["cum_strategy_ptt"] = initial_capital * (1 + bt["strategy_ret_ptt"]).cumprod()
 
         std_basket = bt["basket_ret"].std()
         std_strategy = bt["strategy_ret"].std()
@@ -929,9 +941,16 @@ class RegimeDetector:
         bt["ann_vol_basket"] = bt["basket_ret"].std() * np.sqrt(252)
         bt["ann_vol_strategy"] = bt["strategy_ret"].std() * np.sqrt(252)
 
+        if "strategy_ret_ptt" in bt.columns:
+            std_ptt = bt["strategy_ret_ptt"].std()
+            bt["sharpe_strategy_ptt"] = (bt["strategy_ret_ptt"].mean() / std_ptt * np.sqrt(252)) if std_ptt > 0 else 0.0
+            bt["calmar_strategy_ptt"] = bt["cum_strategy_ptt"].iloc[-1] / abs(bt["cum_strategy_ptt"].min()) if bt["cum_strategy_ptt"].min() < 0 else np.inf
+            bt["ann_return_strategy_ptt"] = (bt["cum_strategy_ptt"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+            bt["ann_vol_strategy_ptt"] = bt["strategy_ret_ptt"].std() * np.sqrt(252)
+
         return bt
 
-    def backtest_skmeans(self, initial_capital=100, signals: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    def backtest_skmeans(self, initial_capital=100, signals: Optional[pd.DataFrame] = None, split_date: Optional[str] = None) -> pd.DataFrame:
         """
         Back-test for sWkmeans after expanding sparse window-level labels
         to the full daily index via forward fill.
@@ -942,6 +961,11 @@ class RegimeDetector:
         signals_skmeans_daily = self._expand_skmeans_signals_to_daily()
 
         simple_ret = (self.close / self.close.shift(1) - 1).mean(axis=1)
+
+        if split_date is not None:
+            simple_ret = simple_ret.loc[:split_date]
+            signals_skmeans_daily = signals_skmeans_daily.loc[:split_date]
+
         simple_ret = simple_ret.reindex(signals_skmeans_daily.index)
 
         bt = pd.DataFrame(index=signals_skmeans_daily.index)

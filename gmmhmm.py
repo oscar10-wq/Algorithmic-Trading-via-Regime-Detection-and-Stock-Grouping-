@@ -322,9 +322,33 @@ class HMMRegimeDetector:
         self.state_probs: Optional[pd.DataFrame] = None
         self.profiles: Optional[List[RegimeProfile]] = None
         self.regime_names: Dict[int, str] = {}
+        self.rank_map: Optional[Dict[int, int]] = None
+        self.train_close: Optional[pd.DataFrame] = None
+        self.test_close: Optional[pd.DataFrame] = None
+        self.train_features_raw: Optional[pd.DataFrame] = None
+        self.test_features_raw: Optional[pd.DataFrame] = None
+        self.train_index: Optional[pd.Index] = None
+        self.test_index: Optional[pd.Index] = None
+        self.train_labels: Optional[pd.Series] = None
+        self.test_labels: Optional[pd.Series] = None
+        self.train_state_probs: Optional[pd.DataFrame] = None
+        self.test_state_probs: Optional[pd.DataFrame] = None
+        self.is_train_test_fit: bool = False
+        self.fit_mode: Optional[str] = None   # "full_sample" or "train_test"
 
     def fit(self) -> "HMMRegimeDetector":
-        """Run full pipeline: features -> scale -> PCA -> HMM -> profile."""
+        """
+        Full-sample fit for descriptive / in-sample regime analysis only.
+
+        Warning
+        -------
+        This method uses the full dataset for training and labelling.
+        It is NOT an out-of-sample evaluation and should not be used
+        as evidence of predictive performance.
+        """
+        self.is_train_test_fit = False
+        self.fit_mode = "full_sample"
+
         self.features_raw = build_features(
             self.close,
             return_periods=self.return_periods,
@@ -375,8 +399,8 @@ class HMMRegimeDetector:
             lambda g: daily_ret.loc[g.index].mean()
         )
 
-        rank_map = {old: new for new, old in enumerate(mean_ret.sort_values().index)}
-        ordered = np.array([rank_map[l] for l in raw_labels])
+        self.rank_map = {old: new for new, old in enumerate(mean_ret.sort_values().index)}
+        ordered = np.array([self.rank_map[l] for l in raw_labels])
         self.labels = pd.Series(ordered, index=self.features_raw.index, name="regime")
 
         prob_df = pd.DataFrame(
@@ -385,12 +409,139 @@ class HMMRegimeDetector:
             columns=[f"state_{i}" for i in range(self.n_regimes)],
         )
         ordered_prob_df = pd.DataFrame(index=prob_df.index)
-        for old_state, new_state in rank_map.items():
+        for old_state, new_state in self.rank_map.items():
             ordered_prob_df[f"state_{new_state}"] = prob_df[f"state_{old_state}"]
         self.state_probs = ordered_prob_df
 
         self.profiles = _profile_regimes(self.close, self.labels, self.features_raw)
         self._auto_name_regimes()
+        return self
+    def train_test_split(self, split_date: str):
+        self.train_close = self.close.loc[self.close.index < split_date].copy()
+        self.test_close = self.close.loc[self.close.index >= split_date].copy()
+
+        self.train_index = self.train_close.index
+        self.test_index = self.test_close.index
+
+        if self.train_close.empty or self.test_close.empty:
+            raise ValueError("Train/test split failed. Check split_date.")
+
+        return self.train_close, self.test_close
+
+    def fit_train_test(self, split_date: str) -> "HMMRegimeDetector":
+        self.is_train_test_fit = True
+        self.fit_mode = "train_test"
+        self.train_test_split(split_date=split_date)
+
+        self.train_features_raw = build_features(
+            self.train_close,
+            return_periods=self.return_periods,
+            vol_windows=self.vol_windows,
+            corr_window=self.corr_window,
+            zscore_lookback=self.zscore_lookback,
+            rsi_period=self.rsi_period,
+        )
+
+        self.scaler = StandardScaler()
+        X_train_scaled = self.scaler.fit_transform(self.train_features_raw)
+
+        if self.use_pca:
+            self.pca = PCA(n_components=self.pca_variance, random_state=self.random_state)
+            X_train = self.pca.fit_transform(X_train_scaled)
+        else:
+            X_train = X_train_scaled
+
+        self.features_scaled = X_train_scaled
+        self.features_reduced = X_train
+
+        if self.n_regimes is None:
+            self.hmm_selection = select_hmm_regimes(
+                X_train,
+                n_min=2,
+                n_max=8,
+                n_mix=self.n_mix,
+                covariance_type=self.covariance_type,
+                n_iter=self.n_iter,
+                random_state=self.random_state,
+            )
+            self.n_regimes = self.hmm_selection.best_n_bic
+
+        self.hmm = GMMHMM(
+            n_components=self.n_regimes,
+            n_mix=self.n_mix,
+            covariance_type=self.covariance_type,
+            n_iter=self.n_iter,
+            random_state=self.random_state,
+        )
+        self.hmm.fit(X_train)
+
+        train_raw_labels = self.hmm.predict(X_train)
+        train_raw_probs = self.hmm.predict_proba(X_train)
+
+        daily_ret = np.log(self.close / self.close.shift(1)).mean(axis=1)
+        daily_ret_train = daily_ret.reindex(self.train_features_raw.index)
+
+        mean_ret_train = pd.Series(train_raw_labels, index=self.train_features_raw.index).groupby(train_raw_labels).apply(
+            lambda g: daily_ret_train.loc[g.index].mean()
+        )
+
+        self.rank_map = {old: new for new, old in enumerate(mean_ret_train.sort_values().index)}
+
+        ordered_train = np.array([self.rank_map[l] for l in train_raw_labels])
+        self.train_labels = pd.Series(ordered_train, index=self.train_features_raw.index, name="regime")
+
+        prob_df_train = pd.DataFrame(
+            train_raw_probs,
+            index=self.train_features_raw.index,
+            columns=[f"state_{i}" for i in range(self.n_regimes)],
+        )
+        ordered_prob_df_train = pd.DataFrame(index=prob_df_train.index)
+        for old_state, new_state in self.rank_map.items():
+            ordered_prob_df_train[f"state_{new_state}"] = prob_df_train[f"state_{old_state}"]
+        self.train_state_probs = ordered_prob_df_train
+
+        features_full = build_features(
+            self.close,
+            return_periods=self.return_periods,
+            vol_windows=self.vol_windows,
+            corr_window=self.corr_window,
+            zscore_lookback=self.zscore_lookback,
+            rsi_period=self.rsi_period,
+        )
+
+        test_start = self.test_close.index[0]
+        test_end = self.test_close.index[-1]
+        self.test_features_raw = features_full.loc[test_start:test_end].copy()
+
+        X_test_scaled = self.scaler.transform(self.test_features_raw)
+
+        if self.pca is not None:
+            X_test = self.pca.transform(X_test_scaled)
+        else:
+            X_test = X_test_scaled
+
+        test_raw_labels = self.hmm.predict(X_test)
+        test_raw_probs = self.hmm.predict_proba(X_test)
+
+        ordered_test = np.array([self.rank_map[l] for l in test_raw_labels])
+        self.test_labels = pd.Series(ordered_test, index=self.test_features_raw.index, name="regime")
+
+        prob_df_test = pd.DataFrame(
+            test_raw_probs,
+            index=self.test_features_raw.index,
+            columns=[f"state_{i}" for i in range(self.n_regimes)],
+        )
+        ordered_prob_df_test = pd.DataFrame(index=prob_df_test.index)
+        for old_state, new_state in self.rank_map.items():
+            ordered_prob_df_test[f"state_{new_state}"] = prob_df_test[f"state_{old_state}"]
+        self.test_state_probs = ordered_prob_df_test
+
+        self.labels = pd.concat([self.train_labels, self.test_labels]).sort_index()
+        self.state_probs = pd.concat([self.train_state_probs, self.test_state_probs]).sort_index()
+
+        self.profiles = _profile_regimes(self.close, self.labels, features_full.loc[self.labels.index])
+        self._auto_name_regimes()
+
         return self
 
     def _auto_name_regimes(self):
@@ -429,27 +580,62 @@ class HMMRegimeDetector:
                 "Avg Corr": f"{p.avg_correlation:.2f}" if pd.notna(p.avg_correlation) else "nan",
             })
         return pd.DataFrame(rows)
-
-    def transition_matrix(self) -> pd.DataFrame:
-        """Return the fitted transition matrix."""
+    
+    def _reordered_transition_matrix(self) -> pd.DataFrame:
+        """
+        Return transition matrix reordered to match the relabelled regimes
+        (i.e. after applying self.rank_map).
+        """
         if self.hmm is None:
-            raise RuntimeError("Call .fit() first.")
+            raise RuntimeError("Call .fit() or .fit_train_test() first.")
+        if self.rank_map is None:
+            raise RuntimeError("rank_map is not available.")
 
-        tm = pd.DataFrame(
-            self.hmm.transmat_,
+        old_tm = np.asarray(self.hmm.transmat_)
+
+        # old_state -> new_state
+        old_to_new = self.rank_map
+
+        # build reverse map: new_state -> old_state
+        new_to_old = {new: old for old, new in old_to_new.items()}
+
+        order = [new_to_old[new] for new in range(self.n_regimes)]
+        reordered = old_tm[np.ix_(order, order)]
+
+        return pd.DataFrame(
+            reordered,
             index=[f"R{i}" for i in range(self.n_regimes)],
             columns=[f"R{i}" for i in range(self.n_regimes)],
         )
-        return tm
+
+    def transition_matrix(self) -> pd.DataFrame:
+        """
+        Return the fitted transition matrix in the SAME regime order as
+        self.labels / self.summary() / self.regime_names.
+        """
+        return self._reordered_transition_matrix()
 
     def generate_signals(
         self,
+        dataset: str = "all",
         bull_regimes: Optional[List[int]] = None,
         bear_regimes: Optional[List[int]] = None,
     ) -> pd.DataFrame:
         """Generate simple regime-conditioned portfolio weights."""
-        if self.labels is None:
-            raise RuntimeError("Call .fit() first.")
+        if dataset == "train":
+            labels = self.train_labels
+            state_probs = self.train_state_probs
+        elif dataset == "test":
+            labels = self.test_labels
+            state_probs = self.test_state_probs
+        elif dataset == "all":
+            labels = self.labels
+            state_probs = self.state_probs
+        else:
+            raise ValueError("dataset must be one of: 'train', 'test', 'all'.")
+
+        if labels is None:
+            raise RuntimeError("Call .fit_train_test() first.")
 
         n = self.n_regimes
         if bull_regimes is None and bear_regimes is None:
@@ -473,52 +659,95 @@ class HMMRegimeDetector:
                 else:
                     weight_map[rid] = 0.5
 
-        signals = pd.DataFrame(index=self.labels.index)
-        signals["regime"] = self.labels
-        signals["regime_name"] = self.labels.map(self.regime_names)
-        signals["weight"] = self.labels.map(weight_map)
-        if self.state_probs is not None:
-            signals["confidence"] = self.state_probs.max(axis=1)
+        signals = pd.DataFrame(index=labels.index)
+        signals["regime"] = labels
+        signals["regime_name"] = labels.map(self.regime_names)
+        signals["weight"] = labels.map(weight_map)
+        if state_probs is not None:
+            signals["confidence"] = state_probs.max(axis=1)
         return signals
 
-    def backtest(self, initial_capital: float = 100, signals: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    def backtest(
+        self,
+        dataset: str = "all",
+        initial_capital: float = 100,
+        signals: Optional[pd.DataFrame] = None,
+        split_date: Optional[str] = None,
+    ) -> pd.DataFrame:
+        if self.fit_mode == "full_sample" and dataset == "all":
+            warnings.warn(
+                "You are backtesting on labels generated from a full-sample fit. "
+                "This is in-sample/descriptive only and is subject to look-ahead bias. "
+                "Use fit_train_test(...)+backtest(dataset='test') for out-of-sample evaluation.",
+                UserWarning,
+    )
         """Simple long-only basket backtest."""
-        if signals is None:
-            signals = self.generate_signals()
+        if dataset == "train":
+            close_used = self.train_close
+        elif dataset == "test":
+            close_used = self.test_close
+        elif dataset == "all":
+            close_used = self.close
+        else:
+            raise ValueError("dataset must be one of: 'train', 'test', 'all'.")
 
-        # Use simple (arithmetic) returns so weighting is valid
-        simple_ret = (self.close / self.close.shift(1) - 1).mean(axis=1)
+        if close_used is None:
+            raise RuntimeError("Call .fit_train_test() first.")
+
+        if signals is None:
+            signals = self.generate_signals(dataset=dataset)
+
+        simple_ret = (close_used / close_used.shift(1) - 1).mean(axis=1)
+        
+
+        if split_date is not None:
+            simple_ret = simple_ret.loc[:split_date]
+            signals = signals.loc[:split_date]
+        
         simple_ret = simple_ret.reindex(signals.index)
 
         bt = pd.DataFrame(index=signals.index)
         bt["basket_ret"] = simple_ret
-        bt["strategy_ret"] = simple_ret * signals["weight"].shift(1).fillna(0)
+        bt["weight"] = signals["weight"]
+        bt["weight_lag1"] = signals["weight"].shift(1)
+        bt["strategy_ret"] = bt["basket_ret"] * bt["weight_lag1"]
 
-        # Cumulative returns via compounding simple returns
+        bt = bt.dropna(subset=["basket_ret", "strategy_ret"])
+
         bt["cum_basket"] = initial_capital * (1 + bt["basket_ret"]).cumprod()
         bt["cum_strategy"] = initial_capital * (1 + bt["strategy_ret"]).cumprod()
 
-        # Sharpe ratios (single scalar, not a column repeated across rows)
         std_basket = bt["basket_ret"].std()
         std_strategy = bt["strategy_ret"].std()
         bt["sharpe_basket"] = (bt["basket_ret"].mean() / std_basket * np.sqrt(252)) if std_basket > 0 else 0.0
         bt["sharpe_strategy"] = (bt["strategy_ret"].mean() / std_strategy * np.sqrt(252)) if std_strategy > 0 else 0.0
 
-        #Calmar ratios
-        max_drawdown_basket = (bt["cum_basket"].cummax() - bt["cum_basket"]).max() / bt["cum_basket"].cummax().max()
-        max_drawdown_strategy = (bt["cum_strategy"].cummax() - bt["cum_strategy"]).max() / bt["cum_strategy"].cummax().max()
-        bt["calmar_basket"] = (bt["basket_ret"].mean() * 252) / (max_drawdown_basket) if max_drawdown_basket > 0 else 0.0
-        bt["calmar_strategy"] = (bt["strategy_ret"].mean() * 252) / (max_drawdown_strategy) if max_drawdown_strategy > 0 else 0.0
+        dd_basket = bt["cum_basket"] / bt["cum_basket"].cummax() - 1
+        dd_strategy = bt["cum_strategy"] / bt["cum_strategy"].cummax() - 1
 
-        # Annualised volatility
+        max_drawdown_basket = abs(dd_basket.min()) if len(dd_basket) > 0 else np.nan
+        max_drawdown_strategy = abs(dd_strategy.min()) if len(dd_strategy) > 0 else np.nan
+
+        ann_ret_basket = (bt["cum_basket"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+        ann_ret_strategy = (bt["cum_strategy"].iloc[-1] / initial_capital) ** (252 / len(bt)) - 1
+
+        bt["calmar_basket"] = ann_ret_basket / max_drawdown_basket if max_drawdown_basket > 0 else 0.0
+        bt["calmar_strategy"] = ann_ret_strategy / max_drawdown_strategy if max_drawdown_strategy > 0 else 0.0
+
         bt["ann_vol_basket"] = bt["basket_ret"].std() * np.sqrt(252)
         bt["ann_vol_strategy"] = bt["strategy_ret"].std() * np.sqrt(252)
 
-        #Annualised return
-        bt["ann_ret_basket"] = bt["basket_ret"].mean() * 252
-        bt["ann_ret_strategy"] = bt["strategy_ret"].mean() * 252
-  
+        bt["ann_ret_basket"] = ann_ret_basket
+        bt["ann_ret_strategy"] = ann_ret_strategy
+
         return bt
+
+    def backtest_test_only(self, initial_capital: float = 100) -> pd.DataFrame:
+        if self.test_index is None:
+            raise RuntimeError("Call fit_train_test(split_date=...) first.")
+
+        signals = self.generate_signals(dataset="test")
+        return self.backtest(dataset="test", initial_capital=initial_capital, signals=signals)
 
     def plot_regimes(self, figsize: Tuple[int, int] = (18, 14)):
         """Six-panel summary chart."""
@@ -604,21 +833,40 @@ class HMMRegimeDetector:
         ax.axhline(0, color="black", lw=0.5)
 
         ax = axes[4]
-        if self.features_reduced is not None and self.features_reduced.shape[1] >= 2:
-            for rid in sorted(self.labels.unique()):
-                mask = self.labels.values == rid
-                ax.scatter(
-                    self.features_reduced[mask, 0],
-                    self.features_reduced[mask, 1],
-                    c=[colours[rid]], s=8, alpha=0.5, label=f"R{rid}",
-                )
-            ax.set_xlabel("PC1")
-            ax.set_ylabel("PC2")
-            ax.set_title("PCA — First Two Components")
-            ax.legend(fontsize=7)
-        else:
-            ax.text(0.5, 0.5, "PCA not available", ha="center", va="center")
 
+        if self.fit_mode == "train_test":
+            # In train/test mode, self.features_reduced contains only TRAIN features.
+            # So only plot PCA scatter for the training sample.
+            if self.features_reduced is not None and self.features_reduced.shape[1] >= 2 and self.train_labels is not None:
+                for rid in sorted(self.train_labels.unique()):
+                    mask = self.train_labels.values == rid
+                    ax.scatter(
+                        self.features_reduced[mask, 0],
+                        self.features_reduced[mask, 1],
+                        c=[colours[rid]], s=8, alpha=0.5, label=f"R{rid}",
+                    )
+                ax.set_xlabel("PC1")
+                ax.set_ylabel("PC2")
+                ax.set_title("PCA — First Two Components (Train Only)")
+                ax.legend(fontsize=7)
+            else:
+                ax.text(0.5, 0.5, "PCA not available", ha="center", va="center")
+        else:
+            # Full-sample fit: features_reduced and labels align
+            if self.features_reduced is not None and self.features_reduced.shape[1] >= 2 and self.labels is not None:
+                for rid in sorted(self.labels.unique()):
+                    mask = self.labels.values == rid
+                    ax.scatter(
+                        self.features_reduced[mask, 0],
+                        self.features_reduced[mask, 1],
+                        c=[colours[rid]], s=8, alpha=0.5, label=f"R{rid}",
+                    )
+                ax.set_xlabel("PC1")
+                ax.set_ylabel("PC2")
+                ax.set_title("PCA — First Two Components")
+                ax.legend(fontsize=7)
+            else:
+                ax.text(0.5, 0.5, "PCA not available", ha="center", va="center")
         ax = axes[5]
         bt = self.backtest()
         ax.plot(bt.index, bt["cum_basket"], label="Buy & Hold", color="grey", alpha=0.8)

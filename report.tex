@@ -91,15 +91,9 @@
 \maketitle
 \thispagestyle{fancy}
 \vspace{-1em}
-
-% ─────────────────────────────────────────────────────────────
-\section{Abstract}
-In this project, we apply k-means clustering and PCA to solve the problem of market regime detection in multi-dimensional financial time-series. We compare these techniques against other regime detection methods: the Hidden Markov Model with Gaussian Mixtures (GMMHMM), sliced-Wasserstein k-means clustering, and a simple peak-to-trough-based regime labelling method.
-We evaluate the quality of each detection method using a trading strategy that goes long when the label indicates a bullish regime and flat otherwise, comparing cumulative returns across methods and regions (America, Europe, Asia).
-
 % ─────────────────────────────────────────────────────────────
 \section{Introduction}
-Financial markets, especially the stock market, have complexities. Due to various factors, such as macroeconomic recession, debt crisis, and policy changes, the market will show different regimes, such as bull and bear markets. Changes in market conditions often lead to fluctuations in stock prices. In different market regimes, investors need to use different trading strategies to increase returns and reduce losses. Therefore, detecting market regimes accurately plays an important role in making investment decisions and controlling trading risks. Traditional means of regime classification use a rules-based definition, such as the peak-to-trough regime labelling method. In contrast, unsupervised learning models identify regimes endogenously from the data, allowing for a more flexible and data-driven characterisation of market states.
+Financial markets, especially the stock market, have complexities. Due to various factors, such as macroeconomic recession, debt crisis, and policy changes, the market shows different regimes, such as bull and bear markets. Changes in market conditions often lead to fluctuations in stock prices. In different market regimes, investors need to use different trading strategies to increase returns and reduce losses. Therefore, detecting market regimes accurately plays an important role in making investment decisions and controlling trading risks. Traditional means of regime classification use a rules-based definition, such as the peak-to-trough regime labelling method. In contrast, unsupervised learning models identify regimes endogenously from the data, allowing for a more flexible and data-driven characterisation of market states.
 
 Regime-switching models, such as Hidden Markov Models, have been used to capture changes in market conditions \cite{gupta2025}. Machine learning methods have also been applied to identify structural changes in financial markets \cite{mustafa2022}. In this work, K-means clustering and PCA are combined to identify market patterns in multidimensional financial time series. The trading strategy used to go long when the label shows bull and keep the position closed otherwise. Cumulative return, Annualized return, Annualized volatility and Sharpe ratio are used to measure the performance of trading strategies based on the results of market regime detection. The performance of the PCA k-means, the Hidden Markov Model with Gaussian Mixtures (GMMHMM), sliced-Wasserstein k-means clustering, and a simple peak-to-trough-based regime labelling method and long only strategy are compared in this project.
 In particular we fit our models on the period of 2010 to 2020 and we test the data on the period 2020 to 2024. We then compare the cumulative returns of the different strategies on the test set.
@@ -334,7 +328,7 @@ We applied k-means for $K \in \{2, \dots, 10\}$ on the PCA-reduced feature space
 \end{figure}
 
 \subsection{Regime Detection Results}
-Figure~\ref{fig:regime_profiles} shows the detected regimes overlaid on an equally weighted basket of indices for each region during the period 2010--2024. In the figure, the red segments represent the crisis regime identified by the model, while the green segments indicate more favourable regimes. These periods broadly align with major historical episodes of market stress, including the 2011 European debt crisis, and the 2020 COVID-19 pandemic.
+Figure~\ref{fig:regime_profiles} shows the detected regimes overlaid on an equally weighted basket of indices for each region during the period 2010--2020. In the figure, the red segments represent the crisis regime identified by the model, while the green segments indicate more favourable regimes. These periods broadly align with major historical episodes of market stress, including the 2011 European debt crisis, and the 2020 COVID-19 pandemic.
 \begin{figure}[H]
     \centering
     \begin{subfigure}[b]{0.32\textwidth}
@@ -354,14 +348,14 @@ Figure~\ref{fig:regime_profiles} shows the detected regimes overlaid on an equal
         \includegraphics[width=\textwidth]{graphs/regime_profile_asia.png}
         \caption{Asian indices.}
     \end{subfigure}
-    \caption{Regime detection on equally weighted baskets for each region.}
+    \caption{In sample regime detection on equally weighted baskets for each region (2010--2020)}
     \label{fig:regime_profiles}
 \end{figure}
 
 \subsection{Trading Strategy Comparison}
 To evaluate regime quality, we implement a long/flat strategy: go long in bullish regimes, hold cash otherwise. We benchmark the PCA K-Means model against GMMHMM, sliced-Wasserstein k-means, peak-to-trough labelling (20\% drawdown threshold), and a long-only baseline. 
-We used the 90\% variance threshold for PCA and we used Return periods of 1, 5, and 21 days, rolling volatilities with windows of 21 and 63 days, momentum z-score with a window of 21 days and RSI as features for the PCA K-Means model.
-We fitted and trained the model on the period of 2010 to 2024. We then tested the data on the period 2020 to 2024.
+We used the 90\% variance threshold for PCA and we used return periods of 1, 5, and 21 days, rolling volatilities with windows of 21 and 63 days, momentum z-score with a window of 21 days and RSI as features for the PCA K-Means model.
+We fitted and trained the model on the period of 2010 to 2020. We then tested the data on the period 2020 to 2024.
 On the test set the training strategies start with an inital capital of \$ 100 at the 1st of January 2020 and we calculate the cumulative returns until the 1st of January 2024.
 We shift the signal by one day to avoid look-ahead bias, and we do not apply transaction costs or slippage in this backtest.
 We plot in the following the performance of the PCA K-Means strategy in red against other strategies on the test period (2020--2024) in Figure~\ref{fig:cumulative_returns}.
@@ -495,7 +489,7 @@ The Asian market prefers 3 regimes, while the European market prefers 4, indicat
 This also suggests that the simpler structure favoured by silhouette score alone does not necessarily match the specification that performs best under the combined score.
 Therefore, the \(K=2\) result in Section~6.1 is better interpreted as a benchmark for cluster structure, while Table~5 reflects the more suitable full parameter combination for each region under the combined evaluation criterion.
 
-The volatility-window resultsalso differ across regions. Both the American and Asian markets prefer \([10,21,63]\), suggesting that shorter-term volatility information adds value for regime detection in these markets, and that regime changes may be more sensitive to short-run risk fluctuations. 
+The volatility-window results also differ across regions. Both the American and Asian markets prefer \([10,21,63]\), suggesting that shorter-term volatility information adds value for regime detection in these markets, and that regime changes may be more sensitive to short-run risk fluctuations. 
 In contrast, the European market prefers \([21,63]\), indicating that smoother medium-term volatility measures are more informative than short-term volatility for capturing changes. Overall, the PCA K-Means framework is fairly stable across regions, since the use of PCA, the PCA variance threshold, and the return-period setting are consistent across all three regions. 
 However, the optimal number of regimes and volatility windows still differ clearly by region, suggesting that the specific feature design remains influenced by differences in regional market structure.
 
@@ -512,12 +506,8 @@ Another limitation concerns the lack of depth for training and testing of the mo
 
 \section{Conclusion}
 We have presented a PCA-enhanced k-means clustering pipeline for market regime detection across American, European, and Asian equity indices. The method identifies two dominant regimes (bullish and bearish) that align relatively well with known periods of market stress. However, when used to drive a simple long/flat trading strategy in out-of-sample test data, the PCA K-Means approach underperforms  compared to alternative methods (GMMHMM, sliced-Wasserstein k-means, peak-to-trough labelling) and the long-only benchmark across all three regions.
-These results suggest that combining dimensionality reduction with unsupervised clustering provides a robust framework for capturing market dynamics. 
-Additionally, hyperparameter tuning results show that most of the model specifications are optimal in all three markets, with PCA mainly providing useful improvements by removing redundant variation. However, more aggressive dimensionality reduction can further reduce noise and preserve key structures in high-dimensional time series. The results also show that the market regimes shows obvious regional differences, and the current feature set can well reflect the market regimes.
-One limitation of this study is that there is no limit on the number of trades, and regimes can change very quickly when the market is volatile. 
-Additionally, frequent trading incurs a lot of costs, which can affect the performance of the trading strategy.
-
-
+These results suggest that combining dimensionality reduction with unsupervised clustering provides a weak framework for capturing market dynamics. 
+Additionally, hyperparameter tuning based on the combined score (sharpe + silhoueette), shows different tuning depending on the region, with the American market preferring a simpler two-regime structure, while the European and Asian markets favour more complex regime structures.
 \bibliographystyle{apalike}
 \bibliography{references}
 
